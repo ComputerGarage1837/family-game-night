@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.familygamenight.app.ui.Avatar
@@ -100,16 +101,16 @@ fun GoFishTable(
 
         // Top banner: what just happened / what to do
         Column(
-            Modifier.align(Alignment.TopCenter).padding(top = 6.dp).widthIn(max = 520.dp)
-                .clip(RoundedCornerShape(14.dp))
+            Modifier.align(Alignment.TopCenter).padding(top = 4.dp).fillMaxWidth(0.62f)
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xCC140E0A))
-                .border(1.dp, Castle.Gold.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .border(1.dp, Castle.Gold.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 3.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val (headline, detail) = banner(view, names, selectedRank, model.seats.getOrNull(view.current)?.kind == SeatKind.AI)
-            Text(headline, color = Castle.GoldPale, fontWeight = FontWeight.Bold, fontSize = 15.sp, textAlign = TextAlign.Center)
-            if (detail != null) Text(detail, color = Castle.Parchment, fontSize = 13.sp, textAlign = TextAlign.Center)
+            Text(headline, color = Castle.GoldPale, fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (detail != null) Text(detail, color = Castle.Parchment, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
 
         // Bottom-left: me and my books
@@ -145,7 +146,7 @@ fun GoFishTable(
             selectedRank = selectedRank,
             enabled = canAct,
             onTap = { card -> selectedRank = if (selectedRank == card.rank) null else card.rank },
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.36f).padding(start = 120.dp, end = 24.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.33f).padding(start = 120.dp, end = 24.dp),
         )
 
         if (view.over) GameOverPanel(view, model, avatars, colorOf, onPlayAgain, onHome)

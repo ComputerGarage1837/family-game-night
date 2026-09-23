@@ -19,7 +19,16 @@ import kotlin.random.Random
 fun main(args: Array<String>) {
     val out = File(args.getOrElse(0) { "out" }).apply { mkdirs() }
     val names = listOf("Mum", "Dad", "Sam", "Merlin", "Lady Wren", "Gran", "Sir Pip", "Ellie", "Tom", "Friar Tuck")
-    for ((players, moves, w, h) in listOf(listOf(4, 14, 2340, 1080), listOf(10, 30, 2340, 1080), listOf(2, 6, 1920, 1080), listOf(6, 0, 1600, 900))) {
+    // players, moves already played, width px, height px, density (2.0 ≈ small phone, 2.75 ≈ modern phone)
+    val shots = listOf(
+        listOf(4f, 14f, 2340f, 1080f, 2.75f),
+        listOf(10f, 30f, 2340f, 1080f, 2.75f),
+        listOf(2f, 6f, 1920f, 1080f, 2.75f),
+        listOf(6f, 0f, 1600f, 900f, 2.5f),
+        listOf(8f, 20f, 1520f, 720f, 2.0f),
+    )
+    for (shot in shots) {
+        val players = shot[0].toInt(); val moves = shot[1].toInt(); val w = shot[2].toInt(); val h = shot[3].toInt()
         val random = Random(players * 31 + moves)
         var s = GoFish.deal(GoFishConfig.from(players, mapOf(GoFishRuleIds.TWO_DECKS to true, GoFishRuleIds.MEMORY_HELPER to true)), random)
         repeat(moves) {
@@ -31,7 +40,7 @@ fun main(args: Array<String>) {
         }
         val viewer = 0
         val model = TableModel(GoFishModule, emptyMap(), seats, viewer, GoFishModule.encodeView(GoFish.view(s, viewer)), 1, true, true)
-        val density = Density(2.75f)
+        val density = Density(shot[4])
         val scene = ImageComposeScene(w, h, density) {
             FamilyGameNightTheme {
                 GoFishTable(model, emptyMap(), { colorFor(it) }, {}, {}, {})

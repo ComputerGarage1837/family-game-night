@@ -93,7 +93,7 @@ fun FloatingHand(
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val n = cards.size.coerceAtLeast(1)
-        val cardW = min(maxHeight / 1.42f * 0.8f, 84.dp)
+        val cardW = min(maxHeight / 1.42f * 0.8f, 76.dp)
         val available = maxWidth * 0.86f - cardW
         val step = if (n > 1) min(cardW * 0.78f, available / (n - 1)) else 0.dp
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {

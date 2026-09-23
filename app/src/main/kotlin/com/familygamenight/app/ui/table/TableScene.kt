@@ -108,14 +108,17 @@ fun TableScene(
         val behind = opponents.filter { sin(angles.getValue(it.index)) < 0.25f }
         val beside = opponents - behind.toSet()
 
+        // Shrink people a little when the table is crowded so neighbours don't overlap.
+        val spacing = if (opponents.isEmpty()) 1f else (TAU - 2 * VIEWER_GAP) / opponents.size * 1.24f
+        val scale = (spacing / 0.8f).coerceIn(0.72f, 1f)
         hits.clear()
-        behind.forEach { drawSeatPerson(cam, it, angles.getValue(it.index), t, measurer, hits) }
+        behind.forEach { drawSeatPerson(cam, it, angles.getValue(it.index), t, measurer, hits, scale) }
         drawRoundTable(cam)
         drawPond(cam, pondCount, measurer)
         opponents.forEach { drawBooks(cam, it, angles.getValue(it.index), measurer) }
-        beside.forEach { drawSeatPerson(cam, it, angles.getValue(it.index), t, measurer, hits) }
+        beside.forEach { drawSeatPerson(cam, it, angles.getValue(it.index), t, measurer, hits, scale) }
         opponents.forEach { drawFloatingHand(cam, it, angles.getValue(it.index), t, measurer) }
-        opponents.forEach { s -> s.bubble?.let { drawBubble(cam, angles.getValue(s.index), it, measurer) } }
+        opponents.forEach { s -> s.bubble?.let { drawBubble(cam, angles.getValue(s.index), it, measurer, scale) } }
     }
 }
 
@@ -128,10 +131,11 @@ private fun DrawScope.drawSeatPerson(
     t: Float,
     measurer: TextMeasurer,
     hits: MutableMap<Int, Pair<Offset, Float>>,
+    scale: Float,
 ) {
     val h = head(angle)
     val c = cam.project(h)
-    val r = cam.pixelsPerUnit(h) * 0.15f
+    val r = cam.pixelsPerUnit(h) * 0.15f * scale
     drawChair(c, r)
 
     // Turn glow / tap-to-ask highlight
@@ -171,7 +175,8 @@ private fun DrawScope.drawSeatPerson(
     val layout = measurer.measure(label, TextStyle(fontSize = (fontPx / density / fontScale).sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, color = Castle.Parchment))
     val plateW = layout.size.width + fontPx
     val plateH = layout.size.height + fontPx * 0.35f
-    val plateTop = Offset(c.x - plateW / 2, c.y + r * 1.08f)
+    // The name sits on a plaque at the top of the chair, clear of the cards floating below.
+    val plateTop = Offset(c.x - plateW / 2, c.y - r * 1.12f - plateH)
     drawRoundRect(Color(0xE6231913), plateTop, Size(plateW, plateH), CornerRadius(plateH / 2))
     drawRoundRect(if (s.isCurrent) Castle.GoldPale else Castle.Gold.copy(alpha = 0.7f), plateTop, Size(plateW, plateH), CornerRadius(plateH / 2), style = Stroke(1.5f))
     drawText(layout, topLeft = Offset(c.x - layout.size.width / 2f, plateTop.y + (plateH - layout.size.height) / 2))
@@ -241,10 +246,10 @@ private fun DrawScope.drawPond(cam: Camera, count: Int, measurer: TextMeasurer) 
     drawText(layout, topLeft = Offset(labelAt.x - layout.size.width / 2f, labelAt.y - layout.size.height / 2f))
 }
 
-private fun DrawScope.drawBubble(cam: Camera, angle: Float, text: String, measurer: TextMeasurer) {
+private fun DrawScope.drawBubble(cam: Camera, angle: Float, text: String, measurer: TextMeasurer, scale: Float) {
     val h = head(angle)
     val c = cam.project(h)
-    val r = cam.pixelsPerUnit(h) * 0.15f
+    val r = cam.pixelsPerUnit(h) * 0.15f * scale
     val fontPx = (r * 0.4f).coerceIn(12.sp.toPx(), 17.sp.toPx())
     val layout = measurer.measure(
         text,
@@ -254,14 +259,18 @@ private fun DrawScope.drawBubble(cam: Camera, angle: Float, text: String, measur
     val w = layout.size.width + fontPx
     val hgt = layout.size.height + fontPx * 0.6f
     // Put the bubble above the head, nudged toward the screen centre so it stays on screen.
-    var x = c.x - w / 2 + (size.width / 2 - c.x) * 0.15f
+    val onRight = c.x < size.width / 2
+    var x = if (onRight) c.x + r * 1.35f else c.x - r * 1.35f - w
     x = x.coerceIn(4f, size.width - w - 4f)
-    val y = (c.y - r * 2.2f - hgt).coerceAtLeast(4f)
+    // Beside the head, on the side facing the middle of the screen, so it never hides the name.
+    val y = (c.y - hgt / 2).coerceIn(4f, size.height - hgt - 4f)
     drawRoundRect(Castle.Parchment, Offset(x, y), Size(w, hgt), CornerRadius(hgt / 3))
+    val edge = if (onRight) x + 1 else x + w - 1
+    val tip = if (onRight) c.x + r * 1.05f else c.x - r * 1.05f
     val tail = Path().apply {
-        moveTo(c.x - fontPx * 0.4f, y + hgt - 1)
-        lineTo(c.x + fontPx * 0.4f, y + hgt - 1)
-        lineTo(c.x, (y + hgt + fontPx * 0.8f).coerceAtMost(c.y - r))
+        moveTo(edge, c.y - fontPx * 0.35f)
+        lineTo(edge, c.y + fontPx * 0.35f)
+        lineTo(tip, c.y)
         close()
     }
     drawPath(tail, Castle.Parchment)

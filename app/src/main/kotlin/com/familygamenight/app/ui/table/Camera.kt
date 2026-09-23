@@ -39,24 +39,24 @@ class Camera(val width: Float, val height: Float) {
     private val cy: Float
 
     init {
-        // Frame the table plus the heads of the far players so everything fits the screen.
+        // Frame the far chairs and both sides of the table. The near edge may run off the bottom:
+        // that's where the player's own hand floats anyway.
         val probe = buildList {
             for (i in 0 until 48) {
                 val a = (i / 48f) * 2f * Math.PI.toFloat()
-                add(V3.onCircle(a, 1.05f, -0.12f))
-                if (sin(a) < 0.2f) add(V3.onCircle(a, 1.22f, 0.62f)) // far chairs
+                add(V3.onCircle(a, 1.05f, -0.13f))
+                if (sin(a) < 0.45f) add(V3.onCircle(a, 1.24f, 0.72f)) // tops of the chairs
             }
         }
-        var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
-        var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+        var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var minY = Float.MAX_VALUE
         for (p in probe) {
             val (x, y) = raw(p)
-            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y)
         }
-        // Leave room at the top for the banner and at the bottom for the player's own hand.
-        val topMargin = height * 0.10f
-        val usableH = height * 0.68f
-        focal = min(width * 0.94f / (maxX - minX), usableH / (maxY - minY))
+        val (_, sideY) = raw(V3(1.05f, -0.13f, 0.35f))
+        // Leave the top strip for the banner; the table's widest point should sit about 3/4 down.
+        val topMargin = height * 0.15f
+        focal = min(width * 0.95f / (maxX - minX), (height * 0.74f - topMargin) / (sideY - minY))
         cx = width / 2f - (minX + maxX) / 2f * focal
         cy = topMargin - minY * focal
     }
