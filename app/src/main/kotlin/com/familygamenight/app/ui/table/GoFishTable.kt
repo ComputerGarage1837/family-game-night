@@ -175,7 +175,7 @@ private fun banner(view: GoFishView, names: List<String>, selected: Rank?, curre
     val last = lastHappening(view, names)
     if (view.over) return "Game over!" to null
     return if (view.myTurn) {
-        (if (selected == null) "Your turn – tap a card to choose what to ask for" else "Now tap who to ask for ${selected.plural}") to last
+        (if (selected == null) "Your turn – tap a card to ask for" else "Now tap who to ask for ${selected.plural}") to last
     } else {
         val who = names[view.current]
         (if (currentIsAi) "$who is thinking…" else "$who's turn") to last
