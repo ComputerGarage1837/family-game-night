@@ -54,6 +54,22 @@ jobs:
           name: family-game-night-v1.0.${{ github.run_number }}
           path: out/*.apk
 
+      # A fixed, no-login download link for the newest build of any branch:
+      # https://github.com/<owner>/<repo>/releases/download/test-build/family-game-night-test.apk
+      # (Pre-release, so the in-app updater ignores it.)
+      - name: Publish test build
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp out/*.apk out/family-game-night-test.apk
+          gh release view test-build >/dev/null 2>&1 || \
+            gh release create test-build --prerelease --target "$GITHUB_SHA" \
+              --title "Test build (automatic)" \
+              --notes "The newest build from any branch, for trying things out. Not an official release."
+          gh release upload test-build out/family-game-night-test.apk --clobber
+
       - name: Render table screenshots
         continue-on-error: true
         run: TABLE_PREVIEW=1 CORE_ONLY=1 ./gradlew :tools:table-preview:run --args="$PWD/out/screenshots"
