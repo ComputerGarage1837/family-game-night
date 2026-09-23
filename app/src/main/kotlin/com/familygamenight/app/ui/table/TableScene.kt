@@ -238,9 +238,10 @@ private fun DrawScope.drawPond(cam: Camera, count: Int, measurer: TextMeasurer) 
         val quad = flatCardCorners(center, 0.11f, 0.16f, rnd.nextFloat() * TAU).map { cam.project(it) }
         drawCardBack(quad, outline = 1.2f)
     }
-    val labelAt = cam.project(V3(0f, 0f, 0.44f))
+    // On the far side of the pond, so the player's own hand never covers it.
+    val labelAt = cam.project(V3(0f, 0f, -0.42f))
     val text = if (count > 0) "Pond · $count" else "Pond is empty"
-    val size = cam.pixelsPerUnit(V3(0f, 0f, 0.44f)) * 0.05f
+    val size = cam.pixelsPerUnit(V3(0f, 0f, -0.42f)) * 0.06f
     val layout = measurer.measure(text, TextStyle(fontSize = (size / density / fontScale).sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = Castle.GoldPale))
     drawRoundRect(Color(0x99000000), Offset(labelAt.x - layout.size.width / 2f - 10, labelAt.y - layout.size.height / 2f - 3), Size(layout.size.width + 20f, layout.size.height + 6f), CornerRadius(12f))
     drawText(layout, topLeft = Offset(labelAt.x - layout.size.width / 2f, labelAt.y - layout.size.height / 2f))
