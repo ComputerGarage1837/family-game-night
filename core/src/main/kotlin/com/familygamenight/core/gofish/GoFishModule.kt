@@ -21,8 +21,8 @@ object GoFishModule : TypedGameModule<GoFishState, GoFishAction, GoFishView>(
         howToPlay = listOf(
             "Everyone is dealt 7 cards (5 each with 4 or more players). The rest are spread face down as the pond.",
             "On your turn, pick a card rank you hold (say, sevens) and ask another player for it.",
-            "If they have any, they must hand over all of them and you go again.",
-            "If not, they say \"Go fish!\" and you draw one card from the pond. Then play passes left.",
+            "If they have any, they must hand over all of them (tap the glowing cards) and you go again.",
+            "If not, they say \"Go fish!\" and you draw one card from the pond (tap the pond). Then play passes left.",
             "Whenever you collect all four cards of a rank (a book), you lay it down.",
             "If your hand runs empty on your turn you draw one card from the pond.",
             "When every book has been made, the player with the most books wins.",
@@ -51,7 +51,16 @@ object GoFishModule : TypedGameModule<GoFishState, GoFishAction, GoFishView>(
     override fun newTyped(playerCount: Int, rules: Map<String, Boolean>, random: Random) =
         GoFish.deal(GoFishConfig.from(playerCount, rules), random)
 
-    override fun currentSeatTyped(state: GoFishState) = if (state.over) null else state.current
+    override fun currentSeatTyped(state: GoFishState) = state.awaiting
+    override fun turnOwnerTyped(state: GoFishState) = if (state.over) null else state.current
+
+    override fun forcedResponseTyped(state: GoFishState, seat: Int): GoFishAction? {
+        val p = state.phase as? GoFishPhase.Respond ?: return null
+        if (p.target != seat || state.over) return null
+        return if (state.hands[seat].any { it.rank == p.rank }) GoFishAction.Give else GoFishAction.SayGoFish
+    }
+
+    override fun isForcedMoveTyped(state: GoFishState, seat: Int) = state.phase != GoFishPhase.Ask
     override fun validateTyped(state: GoFishState, seat: Int, action: GoFishAction) = GoFish.validate(state, seat, action)
     override fun applyTyped(state: GoFishState, seat: Int, action: GoFishAction) = GoFish.apply(state, seat, action)
     override fun viewTyped(state: GoFishState, seat: Int) = GoFish.view(state, seat)

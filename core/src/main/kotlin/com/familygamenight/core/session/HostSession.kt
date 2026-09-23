@@ -26,8 +26,15 @@ class HostSession(
     private val hostName: String,
     private val scope: CoroutineScope,
     private val random: Random = Random.Default,
-    private val aiDelayMs: Long = 1400,
+    aiDelayMs: Long = 1400,
 ) : LanServer.Handler {
+
+    /** Computer player speed; applies straight away to a running game. */
+    var aiDelayMs: Long = aiDelayMs
+        set(value) {
+            field = value
+            _game.value?.aiDelayMs = value
+        }
 
     private val lock = Any()
 

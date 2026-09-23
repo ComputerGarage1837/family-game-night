@@ -50,6 +50,8 @@ class LanClient(
     @Volatile private var socket: Socket? = null
     @Volatile private var outbox: Channel<String>? = null
     @Volatile private var finished = false
+    /** Set while saying goodbye, so the goodbye gets sent before we hang up. */
+    @Volatile private var leaving = false
     @Volatile private var lastHeard = 0L
     private var job: Job? = null
 
@@ -78,10 +80,12 @@ class LanClient(
                 } catch (_: IOException) {
                     // fall through to reconnect
                 } finally {
-                    runCatching { socket?.close() }
-                    outbox?.close()
-                    socket = null
-                    outbox = null
+                    if (!leaving) {
+                        runCatching { socket?.close() }
+                        outbox?.close()
+                        socket = null
+                        outbox = null
+                    }
                 }
                 if (finished) break
                 attempt++
@@ -136,6 +140,7 @@ class LanClient(
 
     /** Leave on purpose – the host sees "X left the game". */
     fun leave() {
+        leaving = true
         send(NetMessage.Leave)
         finished = true
         _status.value = Status.Closed("You left the game")

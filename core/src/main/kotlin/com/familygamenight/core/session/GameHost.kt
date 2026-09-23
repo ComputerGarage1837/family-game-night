@@ -25,8 +25,10 @@ class GameHost(
     state: JsonElement,
     private val scope: CoroutineScope,
     private val random: Random = Random.Default,
-    private val aiDelayMs: Long = 1400,
+    aiDelayMs: Long = 1400,
 ) {
+    /** How long a computer player "thinks" before a real decision. Answers and draws take 60% of this. */
+    @Volatile var aiDelayMs: Long = aiDelayMs
     data class Snapshot(val seats: List<Seat>, val state: JsonElement, val version: Long) {
         val missing: List<Seat> get() = seats.filter { it.isMissing }
         val paused: Boolean get() = missing.isNotEmpty()
@@ -76,9 +78,9 @@ class GameHost(
         }
     }
 
-    fun toSave(id: String, title: String, nowMillis: Long): SavedGame {
+    fun toSave(id: String, title: String, nowMillis: Long, auto: Boolean = false): SavedGame {
         val s = _snapshot.value
-        return SavedGame(id, module.info.id, title, nowMillis, lan, rules, s.seats, s.state)
+        return SavedGame(id, module.info.id, title, nowMillis, lan, rules, s.seats, s.state, auto)
     }
 
     fun close() {
@@ -97,19 +99,31 @@ class GameHost(
         scheduleAi(s)
     }
 
+    /**
+     * Plays moves nobody at this device needs to make by hand: computer players, and in
+     * pass-and-play, no-choice answers from someone who isn't holding the phone.
+     */
     private fun scheduleAi(s: Snapshot) {
         aiJob?.cancel()
         if (s.paused) return
         val cur = module.currentSeat(s.state) ?: return
         val seat = s.seats[cur]
-        if (seat.kind != SeatKind.AI) return
+        val passAndPlayAnswer = seat.kind == SeatKind.LOCAL &&
+            s.seats.count { it.kind == SeatKind.LOCAL } > 1 &&
+            cur != module.turnOwner(s.state) &&
+            module.forcedResponse(s.state, cur) != null
+        if (seat.kind != SeatKind.AI && !passAndPlayAnswer) return
+        val wait = if (module.isForcedMove(s.state, cur)) aiDelayMs * 6 / 10 else aiDelayMs
         aiJob = scope.launch {
-            delay(aiDelayMs)
+            delay(wait)
             synchronized(lock) {
                 val now = _snapshot.value
                 if (now.version != s.version) return@launch
-                val view = module.view(now.state, cur)
-                val action = module.aiAction(view, seat.difficulty ?: Difficulty.MEDIUM, random)
+                val action = if (passAndPlayAnswer) {
+                    module.forcedResponse(now.state, cur) ?: return@launch
+                } else {
+                    module.aiAction(module.view(now.state, cur), seat.difficulty ?: Difficulty.MEDIUM, random)
+                }
                 publish(now.copy(state = module.apply(now.state, cur, action), version = now.version + 1))
             }
         }

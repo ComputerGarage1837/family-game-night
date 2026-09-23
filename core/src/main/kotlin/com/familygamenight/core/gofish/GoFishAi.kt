@@ -68,18 +68,25 @@ object GoFishAi {
     }
 
     fun choose(view: GoFishView, difficulty: Difficulty, random: Random): GoFishAction {
+        when (val phase = view.phase) {
+            // Answering and drawing aren't choices – the AI plays fair like everyone else.
+            is GoFishPhase.Respond ->
+                return if (view.hand.any { it.rank == phase.rank }) GoFishAction.Give else GoFishAction.SayGoFish
+            is GoFishPhase.Draw -> return GoFishAction.Draw
+            GoFishPhase.Ask -> Unit
+        }
         val targets = view.handCounts.indices.filter { view.canAsk(it) }
         val myCounts = view.hand.groupingBy { it.rank }.eachCount()
         require(targets.isNotEmpty() && myCounts.isNotEmpty()) { "AI asked to move with no legal move" }
 
         // Little ones sometimes just pick anything.
         if (difficulty == Difficulty.EASY && random.nextDouble() < 0.35) {
-            return GoFishAction(targets.random(random), myCounts.keys.random(random))
+            return GoFishAction.Ask(targets.random(random), myCounts.keys.random(random))
         }
 
         val beliefs = beliefs(view, difficulty)
 
-        var best: GoFishAction? = null
+        var best: GoFishAction.Ask? = null
         var bestScore = Double.NEGATIVE_INFINITY
         for (rank in myCounts.keys) {
             for (t in targets) {
@@ -95,7 +102,7 @@ object GoFishAi {
                 } + random.nextDouble() * jitter(difficulty)
                 if (score > bestScore) {
                     bestScore = score
-                    best = GoFishAction(t, rank)
+                    best = GoFishAction.Ask(t, rank)
                 }
             }
         }

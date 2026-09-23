@@ -22,6 +22,16 @@ interface GameModule {
     fun newGame(playerCount: Int, rules: Map<String, Boolean>, random: Random): JsonElement
     /** Seat whose move the game is waiting on, or null when the game is over. */
     fun currentSeat(state: JsonElement): Int?
+    /** Whose turn it is (may differ from [currentSeat] while someone else answers, e.g. "go fish"). */
+    fun turnOwner(state: JsonElement): Int? = currentSeat(state)
+    /**
+     * If [seat] only has to answer someone else's move and has no real choice (e.g. handing over
+     * cards they must hand over), the move to make. Used in pass-and-play so the phone doesn't
+     * need passing around just to say "go fish".
+     */
+    fun forcedResponse(state: JsonElement, seat: Int): JsonElement? = null
+    /** True when [seat]'s next move needs no thinking (drawing, answering); the AI goes quicker. */
+    fun isForcedMove(state: JsonElement, seat: Int): Boolean = false
     /** Returns an error message if [action] is not legal for [seat], else null. */
     fun validate(state: JsonElement, seat: Int, action: JsonElement): String?
     fun apply(state: JsonElement, seat: Int, action: JsonElement): JsonElement
@@ -44,6 +54,9 @@ abstract class TypedGameModule<S, A, V>(
     abstract fun viewTyped(state: S, seat: Int): V
     abstract fun aiTyped(view: V, difficulty: Difficulty, random: Random): A
     abstract fun resultTyped(state: S): GameResult?
+    open fun turnOwnerTyped(state: S): Int? = currentSeatTyped(state)
+    open fun forcedResponseTyped(state: S, seat: Int): A? = null
+    open fun isForcedMoveTyped(state: S, seat: Int): Boolean = false
 
     fun decodeState(e: JsonElement): S = GameJson.decodeFromJsonElement(stateSer, e)
     fun encodeState(s: S): JsonElement = GameJson.encodeToJsonElement(stateSer, s)
@@ -56,6 +69,9 @@ abstract class TypedGameModule<S, A, V>(
         encodeState(newTyped(playerCount, rules, random))
 
     override fun currentSeat(state: JsonElement) = currentSeatTyped(decodeState(state))
+    override fun turnOwner(state: JsonElement) = turnOwnerTyped(decodeState(state))
+    override fun forcedResponse(state: JsonElement, seat: Int) = forcedResponseTyped(decodeState(state), seat)?.let { encodeAction(it) }
+    override fun isForcedMove(state: JsonElement, seat: Int) = isForcedMoveTyped(decodeState(state), seat)
 
     override fun validate(state: JsonElement, seat: Int, action: JsonElement): String? {
         val a = runCatching { decodeAction(action) }.getOrElse { return "Unrecognised move" }

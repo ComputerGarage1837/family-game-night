@@ -75,21 +75,68 @@ sealed class GoFishEvent {
     data class Over(val winners: List<Int>) : GoFishEvent()
 }
 
+/** Why a player has to draw from the pond. */
+@Serializable
+enum class DrawReason { GO_FISH, EMPTY_HAND, NO_ONE_TO_ASK }
+
+/** What the game is waiting for. Every step is a separate move so everyone can follow along. */
+@Serializable
+sealed class GoFishPhase {
+    /** The turn owner picks someone and a rank. */
+    @Serializable @SerialName("ask")
+    data object Ask : GoFishPhase()
+
+    /** [target] must hand over their [rank]s, or say "Go fish!" if they have none. */
+    @Serializable @SerialName("respond")
+    data class Respond(val asker: Int, val target: Int, val rank: Rank) : GoFishPhase()
+
+    /** [player] must draw a card from the pond. */
+    @Serializable @SerialName("draw")
+    data class Draw(val player: Int, val reason: DrawReason, val askedRank: Rank? = null) : GoFishPhase()
+}
+
 @Serializable
 data class GoFishState(
     val config: GoFishConfig,
     val hands: List<List<Card>>,
     val pond: List<Card>,
     val books: List<List<Rank>>,
+    /** Whose turn it is. */
     val current: Int,
     val log: List<GoFishEvent>,
     val over: Boolean = false,
     /** Private: the card each player most recently drew (only shown to them). */
     val lastDrawn: List<Card?> = List(hands.size) { null },
-)
+    val phase: GoFishPhase = GoFishPhase.Ask,
+) {
+    /** The seat the game is waiting on. */
+    val awaiting: Int?
+        get() = when {
+            over -> null
+            else -> when (val p = phase) {
+                GoFishPhase.Ask -> current
+                is GoFishPhase.Respond -> p.target
+                is GoFishPhase.Draw -> p.player
+            }
+        }
+}
 
 @Serializable
-data class GoFishAction(val target: Int, val rank: Rank)
+sealed class GoFishAction {
+    @Serializable @SerialName("ask")
+    data class Ask(val target: Int, val rank: Rank) : GoFishAction()
+
+    /** Hand over every card of the asked rank. */
+    @Serializable @SerialName("give")
+    data object Give : GoFishAction()
+
+    @Serializable @SerialName("go_fish")
+    data object SayGoFish : GoFishAction()
+
+    /** Take the top card of the pond. */
+    @Serializable @SerialName("draw")
+    data object Draw : GoFishAction()
+}
 
 @Serializable
 data class GoFishView(
@@ -103,8 +150,14 @@ data class GoFishView(
     val over: Boolean,
     val log: List<GoFishEvent>,
     val lastDrawn: Card?,
+    val phase: GoFishPhase = GoFishPhase.Ask,
 ) {
-    val myTurn get() = !over && current == seat
+    /** It's my turn to ask someone. */
+    val myTurn get() = !over && current == seat && phase == GoFishPhase.Ask
+    /** Someone has asked me and I must answer. */
+    val mustAnswer get() = !over && (phase as? GoFishPhase.Respond)?.target == seat
+    /** I must draw from the pond. */
+    val mustDraw get() = !over && (phase as? GoFishPhase.Draw)?.player == seat
     fun canAsk(target: Int) = target != seat && handCounts.getOrElse(target) { 0 } > 0
     fun winners(): List<Int> {
         val best = books.maxOf { it.size }
@@ -134,42 +187,95 @@ object GoFish {
 
     fun targets(s: GoFishState, seat: Int) = s.hands.indices.filter { it != seat && s.hands[it].isNotEmpty() }
 
-    fun validate(s: GoFishState, seat: Int, a: GoFishAction): String? = when {
-        s.over -> "The game is over"
-        seat != s.current -> "It's not your turn"
-        a.target == seat -> "You can't ask yourself"
-        a.target !in s.hands.indices -> "No such player"
-        s.hands[a.target].isEmpty() -> "That player has no cards"
-        s.hands[seat].none { it.rank == a.rank } -> "You can only ask for a rank you hold"
-        else -> null
+    fun validate(s: GoFishState, seat: Int, a: GoFishAction): String? {
+        if (s.over) return "The game is over"
+        if (seat != s.awaiting) return "It's not your move"
+        val phase = s.phase
+        return when (a) {
+            is GoFishAction.Ask -> when {
+                phase != GoFishPhase.Ask -> "You can't ask right now"
+                a.target == seat -> "You can't ask yourself"
+                a.target !in s.hands.indices -> "No such player"
+                s.hands[a.target].isEmpty() -> "That player has no cards"
+                s.hands[seat].none { it.rank == a.rank } -> "You can only ask for a rank you hold"
+                else -> null
+            }
+            GoFishAction.Give -> when {
+                phase !is GoFishPhase.Respond -> "Nobody asked you for anything"
+                s.hands[seat].none { it.rank == phase.rank } -> "You don't have any ${phase.rank.plural} – say \"Go fish!\""
+                else -> null
+            }
+            GoFishAction.SayGoFish -> when {
+                phase !is GoFishPhase.Respond -> "Nobody asked you for anything"
+                s.hands[seat].any { it.rank == phase.rank } -> "No fibbing – you have ${phase.rank.plural} to hand over!"
+                else -> null
+            }
+            GoFishAction.Draw -> when {
+                phase !is GoFishPhase.Draw -> "You don't need to draw right now"
+                s.pond.isEmpty() -> "The pond is empty"
+                else -> null
+            }
+        }
     }
 
     fun apply(s0: GoFishState, seat: Int, a: GoFishAction): GoFishState {
         validate(s0, seat, a)?.let { throw IllegalArgumentException(it) }
-        var s = s0.copy(log = s0.log + GoFishEvent.Ask(seat, a.target, a.rank))
-        val caught = s.hands[a.target].filter { it.rank == a.rank }
-        if (caught.isNotEmpty()) {
-            s = s.copy(
-                hands = s.hands.mapIndexed { i, h ->
-                    when (i) {
-                        a.target -> h - caught.toSet()
-                        seat -> (h + caught).sortedForHand()
-                        else -> h
-                    }
-                },
-                log = s.log + GoFishEvent.Give(a.target, seat, a.rank, caught.size),
-            )
-            s = collectBooks(s, seat) // asker keeps the turn
-        } else {
-            s = s.copy(log = s.log + GoFishEvent.GoFish(seat, a.target, a.rank))
-            if (s.pond.isEmpty()) {
-                s = s.copy(log = s.log + GoFishEvent.PondEmpty(seat), current = next(s, seat))
-            } else {
+        var s = s0
+        when (a) {
+            is GoFishAction.Ask -> {
+                s = s.copy(
+                    log = s.log + GoFishEvent.Ask(seat, a.target, a.rank),
+                    phase = GoFishPhase.Respond(seat, a.target, a.rank),
+                )
+            }
+            GoFishAction.Give -> {
+                val p = s.phase as GoFishPhase.Respond
+                val caught = s.hands[p.target].filter { it.rank == p.rank }
+                s = s.copy(
+                    hands = s.hands.mapIndexed { i, h ->
+                        when (i) {
+                            p.target -> h - caught.toSet()
+                            p.asker -> (h + caught).sortedForHand()
+                            else -> h
+                        }
+                    },
+                    log = s.log + GoFishEvent.Give(p.target, p.asker, p.rank, caught.size),
+                    phase = GoFishPhase.Ask, // asker goes again
+                )
+                s = collectBooks(s, p.asker)
+            }
+            GoFishAction.SayGoFish -> {
+                val p = s.phase as GoFishPhase.Respond
+                s = s.copy(log = s.log + GoFishEvent.GoFish(p.asker, p.target, p.rank))
+                s = if (s.pond.isEmpty()) {
+                    s.copy(log = s.log + GoFishEvent.PondEmpty(p.asker), current = next(s, p.asker), phase = GoFishPhase.Ask)
+                } else {
+                    s.copy(phase = GoFishPhase.Draw(p.asker, DrawReason.GO_FISH, p.rank))
+                }
+            }
+            GoFishAction.Draw -> {
+                val p = s.phase as GoFishPhase.Draw
                 val card = s.pond.first()
-                val lucky = s.config.luckyFish && card.rank == a.rank
-                s = drawTop(s, seat, if (lucky) card.rank else null)
-                s = collectBooks(s, seat)
-                if (!lucky) s = s.copy(current = next(s, seat))
+                when (p.reason) {
+                    DrawReason.GO_FISH -> {
+                        val lucky = s.config.luckyFish && card.rank == p.askedRank
+                        s = drawTop(s, seat, if (lucky) card.rank else null)
+                        s = collectBooks(s, seat)
+                        s = s.copy(phase = GoFishPhase.Ask, current = if (lucky) seat else next(s, seat))
+                    }
+                    DrawReason.EMPTY_HAND -> {
+                        s = s.copy(log = s.log + GoFishEvent.Refill(seat))
+                        s = drawTop(s, seat, null)
+                        s = collectBooks(s, seat)
+                        s = s.copy(phase = GoFishPhase.Ask) // now ask as normal
+                    }
+                    DrawReason.NO_ONE_TO_ASK -> {
+                        s = s.copy(log = s.log + GoFishEvent.NoOneToAsk(seat))
+                        s = drawTop(s, seat, null)
+                        s = collectBooks(s, seat)
+                        s = s.copy(phase = GoFishPhase.Ask, current = next(s, seat))
+                    }
+                }
             }
         }
         return normalize(s)
@@ -202,26 +308,18 @@ object GoFish {
         return s
     }
 
-    /** Moves the game along until someone has a real choice to make (or it's over). */
+    /** At the start of a turn, works out whether the player can ask or must draw (or be skipped). */
     private fun normalize(s0: GoFishState): GoFishState {
         var s = s0
-        repeat(10_000) {
+        if (s.phase != GoFishPhase.Ask) return s
+        repeat(1_000) {
             if (s.over) return s
             if (s.pond.isEmpty() && s.hands.all { it.isEmpty() }) return finish(s)
             val p = s.current
             when {
-                s.hands[p].isEmpty() && s.pond.isNotEmpty() -> {
-                    s = s.copy(log = s.log + GoFishEvent.Refill(p))
-                    s = drawTop(s, p, null)
-                    s = collectBooks(s, p)
-                }
+                s.hands[p].isEmpty() && s.pond.isNotEmpty() -> return s.copy(phase = GoFishPhase.Draw(p, DrawReason.EMPTY_HAND))
                 s.hands[p].isEmpty() -> s = s.copy(current = next(s, p))
-                targets(s, p).isEmpty() && s.pond.isNotEmpty() -> {
-                    s = s.copy(log = s.log + GoFishEvent.NoOneToAsk(p))
-                    s = drawTop(s, p, null)
-                    s = collectBooks(s, p)
-                    s = s.copy(current = next(s, p))
-                }
+                targets(s, p).isEmpty() && s.pond.isNotEmpty() -> return s.copy(phase = GoFishPhase.Draw(p, DrawReason.NO_ONE_TO_ASK))
                 // Only this player holds cards and the pond is dry: nothing more can happen.
                 targets(s, p).isEmpty() -> return finish(s)
                 else -> return s
@@ -247,5 +345,6 @@ object GoFish {
         over = s.over,
         log = s.log,
         lastDrawn = s.lastDrawn.getOrNull(seat),
+        phase = s.phase,
     )
 }

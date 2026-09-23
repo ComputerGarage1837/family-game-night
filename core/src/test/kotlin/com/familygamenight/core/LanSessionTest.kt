@@ -48,7 +48,7 @@ class LanSessionTest {
                 val t = client?.table?.value ?: return false
                 if (t.version != snap.version) return false // wait until the client is up to date
                 val v = GoFishModule.decodeView(t.view)
-                if (!v.myTurn) return false
+                if (!v.myTurn && !v.mustAnswer && !v.mustDraw) return false
                 client.act(GoFishModule.encodeAction(GoFishAi.choose(v, Difficulty.MEDIUM, random)))
                 return true
             }

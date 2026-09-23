@@ -36,6 +36,8 @@ data class SavedGame(
     val rules: Map<String, Boolean>,
     val seats: List<Seat>,
     val state: JsonElement,
+    /** Saved automatically (for crash recovery) rather than by the host. */
+    val auto: Boolean = false,
 )
 
 /** Names for AI players, in keeping with the castle. */

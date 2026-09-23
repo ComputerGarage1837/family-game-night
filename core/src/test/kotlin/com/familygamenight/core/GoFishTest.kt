@@ -30,13 +30,13 @@ class GoFishTest {
         while (!s.over) {
             val cardsInPlay = s.hands.sumOf { it.size } + s.pond.size + s.books.sumOf { it.size } * s.config.bookSize
             assertEquals(total, cardsInPlay, "cards must be conserved")
-            val seat = s.current
+            val seat = s.awaiting!!
             val view = GoFish.view(s, seat)
             assertEquals(s.hands[seat], view.hand)
             val a = GoFishAi.choose(view, difficulties[seat], random)
             assertNull(GoFish.validate(s, seat, a), "AI must only make legal moves")
             s = GoFish.apply(s, seat, a)
-            assertTrue(++moves < 5_000, "game must end")
+            assertTrue(++moves < 20_000, "game must end")
         }
         assertTrue(s.hands.all { it.isEmpty() } && s.pond.isEmpty())
         assertEquals(total / s.config.bookSize, s.books.sumOf { it.size })
@@ -82,7 +82,10 @@ class GoFishTest {
             current = 0,
             log = emptyList(),
         )
-        val after = GoFish.apply(s, 0, GoFishAction(1, Rank.SEVEN))
+        val asked = GoFish.apply(s, 0, GoFishAction.Ask(1, Rank.SEVEN))
+        assertEquals(1, asked.awaiting, "the target must answer")
+        assertNotNull(GoFish.validate(asked, 1, GoFishAction.SayGoFish), "no fibbing when you have them")
+        val after = GoFish.apply(asked, 1, GoFishAction.Give)
         assertEquals(3, after.hands[0].count { it.rank == Rank.SEVEN })
         assertEquals(listOf(c(Rank.NINE, Suit.CLUBS)), after.hands[1])
         assertEquals(0, after.current)
@@ -100,13 +103,21 @@ class GoFishTest {
             current = 0,
             log = emptyList(),
         )
-        val unlucky = GoFish.apply(state(c(Rank.KING, Suit.CLUBS)), 0, GoFishAction(1, Rank.SEVEN))
+        fun fish(top: Card): GoFishState {
+            var st = GoFish.apply(state(top), 0, GoFishAction.Ask(1, Rank.SEVEN))
+            assertNotNull(GoFish.validate(st, 1, GoFishAction.Give), "can't hand over what you don't have")
+            st = GoFish.apply(st, 1, GoFishAction.SayGoFish)
+            assertEquals(0, st.awaiting, "asker must now draw")
+            assertNotNull(GoFish.validate(st, 1, GoFishAction.Draw))
+            return GoFish.apply(st, 0, GoFishAction.Draw)
+        }
+        val unlucky = fish(c(Rank.KING, Suit.CLUBS))
         assertEquals(1, unlucky.current)
         assertEquals(c(Rank.KING, Suit.CLUBS), unlucky.lastDrawn[0])
         // The drawn card is private: the public log must not reveal its rank.
         assertNull((unlucky.log.last { it is GoFishEvent.Draw } as GoFishEvent.Draw).luckyRank)
 
-        val lucky = GoFish.apply(state(c(Rank.SEVEN, Suit.HEARTS)), 0, GoFishAction(1, Rank.SEVEN))
+        val lucky = fish(c(Rank.SEVEN, Suit.HEARTS))
         assertEquals(0, lucky.current)
         assertEquals(Rank.SEVEN, (lucky.log.last { it is GoFishEvent.Draw } as GoFishEvent.Draw).luckyRank)
     }
@@ -114,11 +125,12 @@ class GoFishTest {
     @Test
     fun illegalMovesAreRejected() {
         val s = GoFish.deal(GoFishConfig.from(3, emptyMap()), Random(5))
-        val seat = s.current
+        val seat = s.awaiting!!
         val notHeld = Rank.entries.first { r -> s.hands[seat].none { it.rank == r } }
-        assertNotNull(GoFish.validate(s, seat, GoFishAction((seat + 1) % 3, notHeld)))
-        assertNotNull(GoFish.validate(s, seat, GoFishAction(seat, s.hands[seat].first().rank)))
-        assertNotNull(GoFish.validate(s, (seat + 1) % 3, GoFishAction(seat, s.hands[(seat + 1) % 3].first().rank)))
+        assertNotNull(GoFish.validate(s, seat, GoFishAction.Ask((seat + 1) % 3, notHeld)))
+        assertNotNull(GoFish.validate(s, seat, GoFishAction.Ask(seat, s.hands[seat].first().rank)))
+        assertNotNull(GoFish.validate(s, (seat + 1) % 3, GoFishAction.Ask(seat, s.hands[(seat + 1) % 3].first().rank)))
+        assertNotNull(GoFish.validate(s, seat, GoFishAction.Draw), "no drawing when you should be asking")
     }
 
     @Test
@@ -167,7 +179,7 @@ class GoFishTest {
             log = listOf(GoFishEvent.Ask(1, 2, Rank.JACK), GoFishEvent.GoFish(1, 2, Rank.JACK)),
         )
         repeat(20) {
-            assertEquals(GoFishAction(1, Rank.JACK), GoFishAi.choose(GoFish.view(s, 0), Difficulty.HARD, Random(it)))
+            assertEquals(GoFishAction.Ask(1, Rank.JACK), GoFishAi.choose(GoFish.view(s, 0), Difficulty.HARD, Random(it)))
         }
     }
 
