@@ -8,16 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,19 +29,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.familygamenight.app.ui.Avatar
 import com.familygamenight.app.ui.TableModel
 import com.familygamenight.app.ui.theme.Castle
 import com.familygamenight.core.cards.Rank
 import com.familygamenight.core.game.Difficulty
+import com.familygamenight.core.gofish.DrawReason
 import com.familygamenight.core.gofish.GoFishAction
 import com.familygamenight.core.gofish.GoFishAi
 import com.familygamenight.core.gofish.GoFishEvent
 import com.familygamenight.core.gofish.GoFishModule
+import com.familygamenight.core.gofish.GoFishPhase
 import com.familygamenight.core.gofish.GoFishView
 import com.familygamenight.core.session.SeatKind
 
@@ -62,7 +58,10 @@ fun GoFishTable(
     var selectedRank by remember { mutableStateOf<Rank?>(null) }
     var showMemory by remember { mutableStateOf(false) }
     val paused = model.missing.isNotEmpty()
-    val canAct = view.myTurn && !paused
+    val canAsk = view.myTurn && !paused
+    val asked = (view.phase as? GoFishPhase.Respond)?.takeIf { view.mustAnswer && !paused }
+    val mustDraw = view.mustDraw && !paused
+    fun send(a: GoFishAction) = onAction(GoFishModule.encodeAction(a))
 
     LaunchedEffect(view.myTurn, view.hand) {
         if (!view.myTurn || view.hand.none { it.rank == selectedRank }) selectedRank = null
@@ -80,7 +79,7 @@ fun GoFishTable(
             isCurrent = !view.over && view.current == seat.index,
             isAi = seat.kind == SeatKind.AI,
             missing = seat.isMissing,
-            selectable = canAct && selectedRank != null && view.canAsk(seat.index),
+            selectable = canAsk && selectedRank != null && view.canAsk(seat.index),
             bubble = bubbles[seat.index],
         )
     }
@@ -89,46 +88,30 @@ fun GoFishTable(
         TableScene(
             seats = sceneSeats,
             viewer = view.seat,
-            pondCount = view.pondCount,
+            center = TableCenter.Pond(view.pondCount, glow = mustDraw),
             onSeatTap = { target ->
                 val rank = selectedRank
-                if (canAct && rank != null && view.canAsk(target)) {
-                    onAction(GoFishModule.encodeAction(GoFishAction(target, rank)))
+                if (canAsk && rank != null && view.canAsk(target)) {
+                    send(GoFishAction.Ask(target, rank))
                     selectedRank = null
                 }
             },
+            onCenterTap = { if (mustDraw) send(GoFishAction.Draw) },
         )
 
-        // Top banner: what just happened / what to do
-        Column(
-            Modifier.align(Alignment.TopCenter).padding(top = 4.dp).fillMaxWidth(0.62f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xCC140E0A))
-                .border(1.dp, Castle.Gold.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 3.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            val (headline, detail) = banner(view, names, selectedRank, model.seats.getOrNull(view.current)?.kind == SeatKind.AI)
-            Text(headline, color = Castle.GoldPale, fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (detail != null) Text(detail, color = Castle.Parchment, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        val (headline, detail) = banner(view, names, selectedRank, model.seats.getOrNull(view.current)?.kind == SeatKind.AI)
+        TableBanner(headline, detail, Modifier.align(Alignment.TopCenter))
 
-        // Bottom-left: me and my books
-        Row(
-            Modifier.align(Alignment.BottomStart).padding(8.dp)
-                .clip(RoundedCornerShape(12.dp)).background(Color(0xB3140E0A)).padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        val me = model.seats[view.seat]
+        val myBooks = view.books[view.seat]
+        MeBadge(
+            me, avatars[me.profileId], colorOf(me.profileId),
+            active = view.myTurn || view.mustAnswer || view.mustDraw,
+            info = "${myBooks.size} book${if (myBooks.size == 1) "" else "s"}",
+            modifier = Modifier.align(Alignment.BottomStart),
         ) {
-            val me = model.seats[view.seat]
-            Avatar(me.name, avatars[me.profileId], colorOf(me.profileId), 40.dp, ring = if (view.myTurn) Castle.GoldPale else Castle.Gold)
-            Column(Modifier.padding(start = 8.dp)) {
-                Text(me.name, color = Castle.Parchment, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("${view.books[view.seat].size} book${if (view.books[view.seat].size == 1) "" else "s"}", color = Castle.GoldPale, fontSize = 12.sp)
-                if (view.books[view.seat].isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        view.books[view.seat].takeLast(7).forEach { MiniCard(it.label) }
-                    }
-                }
+            if (myBooks.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { myBooks.takeLast(7).forEach { MiniCard(it.label) } }
             }
         }
 
@@ -140,16 +123,42 @@ fun GoFishTable(
             if (showMemory) MemoryPanel(view, names, Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 8.dp))
         }
 
-        // My floating hand
+        // Someone asked me for a rank I don't have: I have to say it.
+        if (asked != null && view.hand.none { it.rank == asked.rank }) {
+            Button(
+                onClick = { send(GoFishAction.SayGoFish) },
+                colors = ButtonDefaults.buttonColors(containerColor = Castle.Felt, contentColor = Color.White),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 12.dp),
+            ) { Text("Go fish! 🐟", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        }
+
         FloatingHand(
             cards = view.hand,
-            selectedRank = selectedRank,
-            enabled = canAct,
-            onTap = { card -> selectedRank = if (selectedRank == card.rank) null else card.rank },
+            lifted = { it.rank == selectedRank },
+            glowing = { card -> asked != null && card.rank == asked.rank },
+            enabled = canAsk || asked != null,
+            onTap = { card ->
+                when {
+                    asked != null -> if (card.rank == asked.rank) send(GoFishAction.Give)
+                    canAsk -> selectedRank = if (selectedRank == card.rank) null else card.rank
+                }
+            },
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.33f).padding(start = 120.dp, end = 24.dp),
         )
 
-        if (view.over) GameOverPanel(view, model, avatars, colorOf, onPlayAgain, onHome)
+        if (view.over) {
+            val winners = view.winners()
+            ResultsPanel(
+                title = when {
+                    winners.size > 1 -> "It's a tie!"
+                    winners.single() == view.seat -> "You win! 🎉"
+                    else -> "${names[winners.single()]} wins!"
+                },
+                rows = model.seats.sortedByDescending { view.books[it.index].size }
+                    .map { ResultRow(it, it.index in winners, "${view.books[it.index].size} books") },
+                avatars = avatars, colorOf = colorOf, onPlayAgain = onPlayAgain, onHome = onHome,
+            )
+        }
     }
 }
 
@@ -160,7 +169,7 @@ private fun bubblesFor(view: GoFishView, names: List<String>): Map<Int, String> 
     val out = HashMap<Int, String>()
     for (e in view.log.subList(start, view.log.size)) {
         when (e) {
-            is GoFishEvent.Ask -> out[e.asker] = "${names[e.target]}, got any ${e.rank.plural}?"
+            is GoFishEvent.Ask -> out[e.asker] = "${if (e.target == view.seat) "You" else names[e.target]}, got any ${e.rank.plural}?"
             is GoFishEvent.Give -> out[e.from] = if (e.count == 1) "Here's one." else "Here – ${e.count} of them."
             is GoFishEvent.GoFish -> out[e.target] = "Go fish! 🐟"
             is GoFishEvent.Draw -> e.luckyRank?.let { out[e.player] = "Lucky catch – a ${it.singular}!" }
@@ -174,12 +183,25 @@ private fun bubblesFor(view: GoFishView, names: List<String>): Map<Int, String> 
 private fun banner(view: GoFishView, names: List<String>, selected: Rank?, currentIsAi: Boolean): Pair<String, String?> {
     val last = lastHappening(view, names)
     if (view.over) return "Game over!" to null
-    return if (view.myTurn) {
-        (if (selected == null) "Your turn – tap a card to ask for" else "Now tap who to ask for ${selected.plural}") to last
-    } else {
-        val who = names[view.current]
-        (if (currentIsAi) "$who is thinking…" else "$who's turn") to last
+    val phase = view.phase
+    val headline = when {
+        view.mustAnswer && phase is GoFishPhase.Respond -> {
+            val who = names[phase.asker]
+            if (view.hand.any { it.rank == phase.rank }) "$who wants your ${phase.rank.plural} – tap them to hand over"
+            else "$who asked for ${phase.rank.plural} – you have none. Say “Go fish!”"
+        }
+        view.mustDraw && phase is GoFishPhase.Draw -> when (phase.reason) {
+            DrawReason.GO_FISH -> "Go fish! Tap the pond to draw a card"
+            DrawReason.EMPTY_HAND -> "Your hand is empty – tap the pond to draw"
+            DrawReason.NO_ONE_TO_ASK -> "Nobody has cards to ask – tap the pond to draw"
+        }
+        view.myTurn -> if (selected == null) "Your turn – tap a card to ask for" else "Now tap who to ask for ${selected.plural}"
+        phase is GoFishPhase.Respond -> "${names[phase.target]} is checking their cards…"
+        phase is GoFishPhase.Draw -> "${names[phase.player]} is fishing in the pond…"
+        currentIsAi -> "${names[view.current]} is thinking…"
+        else -> "${names[view.current]}'s turn"
     }
+    return headline to last
 }
 
 private fun lastHappening(view: GoFishView, names: List<String>): String? {
@@ -230,53 +252,6 @@ private fun MemoryPanel(view: GoFishView, names: List<String>, modifier: Modifie
                 "${names[p]}: " + if (has.isEmpty()) "–" else has.joinToString { it.plural },
                 color = Castle.Parchment, fontSize = 12.sp,
             )
-        }
-    }
-}
-
-@Composable
-private fun GameOverPanel(
-    view: GoFishView,
-    model: TableModel,
-    avatars: Map<String, ImageBitmap>,
-    colorOf: (String) -> Color,
-    onPlayAgain: (() -> Unit)?,
-    onHome: () -> Unit,
-) {
-    val winners = view.winners()
-    Box(Modifier.fillMaxSize().background(Color(0xAA000000)), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier.widthIn(max = 460.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, Castle.Gold, RoundedCornerShape(20.dp))
-                .padding(18.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val title = when {
-                winners.size > 1 -> "It's a tie!"
-                winners.single() == view.seat -> "You win! 🎉"
-                else -> "${model.seats[winners.single()].name} wins!"
-            }
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = Castle.GoldPale)
-            model.seats.sortedByDescending { view.books[it.index].size }.forEach { s ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(s.name, avatars[s.profileId], colorOf(s.profileId), 32.dp)
-                    Text(
-                        (if (s.index in winners) "👑 " else "") + s.name,
-                        modifier = Modifier.weight(1f).padding(start = 10.dp),
-                        fontWeight = if (s.index in winners) FontWeight.Bold else FontWeight.Normal,
-                    )
-                    Text("${view.books[s.index].size} books", color = Castle.GoldPale)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                if (onPlayAgain != null) Button(onClick = onPlayAgain) { Text("Play again") }
-                OutlinedButton(onClick = onHome) { Text("Home") }
-            }
-            if (onPlayAgain == null) Text("The host can start another round.", fontSize = 12.sp)
         }
     }
 }

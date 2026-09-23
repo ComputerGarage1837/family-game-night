@@ -1,22 +1,29 @@
 # Family Game Night
 
 An Android compilation of our family's favourite card and board games, played around an ornate
-round table in a castle hall. It starts with **Go Fish**.
+round table in a castle hall. So far: **Go Fish** and **Crazy Eights**.
 
 - 2–10 players: people on this phone, people on other phones over Wi-Fi, and computer players
 - Computer players at **Easy** (young child), **Normal** (teen) and **Hard** (adult). They never
   cheat: they only know their own cards and what's been said at the table. The difference is how
   much they remember. Pure games of chance won't have difficulty levels.
+- Every step is yours to take: tap the glowing cards to hand them over, press **Go fish!**, tap the
+  pond or deck to draw. Subtle glows show what you can do.
+- Computer player speed: Relaxed, Normal or Fast (Settings, or the in-game ☰ menu)
 - Optional house rules for each game, shown before you start and on the rules screen
 - Pass-and-play on one phone, with the screen covered between turns so nobody peeks
 - Wi-Fi (LAN) games: the host's phone runs the game and others join from the same network
 - If someone leaves or drops out, the game pauses and the host picks: **replace them with a
   computer player**, **save & quit**, or **wait for them to reconnect**
-- The host can save at any time and resume later (Wi-Fi players just rejoin)
+- The host can save at any time and resume later (Wi-Fi players just rejoin). Games are also
+  auto-saved once a round in case of a crash; quitting without saving removes that auto-save.
 - Users are stored on the device, each with an optional photo avatar that's shown at the table
 - **Update** button plus an automatic update check from this repo's GitHub Releases
 
 ## Installing
+
+**Newest test build (direct download):**
+https://github.com/ComputerGarage1837/family-game-night/releases/download/test-build/family-game-night-test.apk
 
 1. Open the repo's **Releases** page on your phone and download the newest `.apk`.
 2. Open it. Android will ask you to allow installs from your browser/files app. Allow it once.

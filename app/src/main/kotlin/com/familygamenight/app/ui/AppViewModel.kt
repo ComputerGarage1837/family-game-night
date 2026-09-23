@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.familygamenight.app.data.AiSpeed
 import com.familygamenight.app.data.Profile
 import com.familygamenight.app.data.ProfileStore
 import com.familygamenight.app.data.SaveStore
@@ -190,13 +191,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val hostPort: Int get() = _session.value?.port ?: -1
 
+    private val _aiSpeed = MutableStateFlow(settings.aiSpeed)
+    val aiSpeed: StateFlow<AiSpeed> = _aiSpeed.asStateFlow()
+
+    fun setAiSpeed(speed: AiSpeed) {
+        settings.aiSpeed = speed
+        _aiSpeed.value = speed
+        _session.value?.aiDelayMs = speed.delayMs
+    }
+
+    // Crash recovery: the host's game is quietly saved once per round.
+    private var autoSaveId: String? = null
+    private var lastTurnOwner: Int? = null
+    private var turnsSinceAutoSave = 0
+
+    private fun resetAutoSave(existing: String? = null) {
+        autoSaveId = existing
+        lastTurnOwner = null
+        turnsSinceAutoSave = 0
+    }
+
+    private fun autoSave(g: GameHost) {
+        val id = autoSaveId ?: "auto-${UUID.randomUUID()}".also { autoSaveId = it }
+        val names = g.snapshot.value.seats.joinToString(", ") { it.name }
+        val save = g.toSave(id, "${g.module.info.name} – $names", System.currentTimeMillis(), auto = true)
+        viewModelScope.launch(Dispatchers.IO) { saveStore.save(save) }
+    }
+
+    private fun deleteAutoSave() {
+        autoSaveId?.let { id -> viewModelScope.launch(Dispatchers.IO) { saveStore.delete(id) } }
+        autoSaveId = null
+    }
+
     fun startHosting(gameId: String, lan: Boolean) {
         val me = currentProfile ?: return toast("Create a user first")
         endHosting(save = false)
         val module = Games.byId(gameId)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         sessionScope = scope
-        val s = HostSession(module, module.info.defaultRules(), lan, me.name, scope)
+        val s = HostSession(module, module.info.defaultRules(), lan, me.name, scope, aiDelayMs = settings.aiSpeed.delayMs)
         _session.value = s
         viewModelScope.launch {
             val avatar = withContext(Dispatchers.IO) { profileStore.avatarForNetwork(me.id) }
@@ -228,6 +261,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val s = _session.value ?: return
         if (!s.canStart()) return toast("Need ${s.module.info.minPlayers}–${s.module.info.maxPlayers} players")
         currentSaveId = null
+        resetAutoSave()
         resetPassAndPlay()
         s.startGame()
         go(Screen.Game)
@@ -236,6 +270,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun rematch() {
         val s = _session.value ?: return
         currentSaveId = null
+        resetAutoSave()
         resetPassAndPlay()
         s.rematch()
     }
@@ -246,9 +281,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val module = Games.byId(saved.gameId)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         sessionScope = scope
-        val s = HostSession(module, saved.rules, saved.lan, me.name, scope)
+        val s = HostSession(module, saved.rules, saved.lan, me.name, scope, aiDelayMs = settings.aiSpeed.delayMs)
         _session.value = s
-        currentSaveId = saved.id
+        currentSaveId = if (saved.auto) null else saved.id
+        resetAutoSave(if (saved.auto) saved.id else null)
         resetPassAndPlay()
         watchSession(s)
         viewModelScope.launch {
@@ -274,7 +310,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun endHosting(save: Boolean) {
-        if (save) saveGame()
+        if (save && saveGame()) deleteAutoSave()
         _session.value?.end("The host ended the game")
         _session.value = null
         sessionJobs.forEach { it.cancel() }
@@ -286,7 +322,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun quitGame(save: Boolean) {
-        if (_client.value != null) leaveAsClient() else endHosting(save)
+        if (_client.value != null) {
+            leaveAsClient()
+        } else {
+            // Quitting without saving means no crash-recovery save should linger either.
+            if (!save) deleteAutoSave()
+            endHosting(save)
+        }
         home()
     }
 
@@ -314,10 +356,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val locals = snap.seats.filter { it.kind == SeatKind.LOCAL }
         if (locals.isEmpty()) return
         if (viewerSeat !in locals.map { it.index }) viewerSeat = locals.first().index
-        val cur = g.module.currentSeat(snap.state)
-        if (cur != null && snap.seats[cur].kind == SeatKind.LOCAL && cur != viewerSeat) {
-            viewerSeat = cur
-            if (locals.size > 1 && g.module.info.hiddenHands) _handoff.value = snap.seats[cur]
+        // Follow whose turn it is (not who's answering – those answers are automatic in pass-and-play).
+        val owner = g.module.turnOwner(snap.state)
+        if (owner != null && snap.seats[owner].kind == SeatKind.LOCAL && owner != viewerSeat) {
+            viewerSeat = owner
+            if (locals.size > 1 && g.module.info.hiddenHands) _handoff.value = snap.seats[owner]
+        }
+        if (owner != null && owner != lastTurnOwner) {
+            if (lastTurnOwner != null) turnsSinceAutoSave++
+            lastTurnOwner = owner
+            if (turnsSinceAutoSave >= snap.seats.size) {
+                turnsSinceAutoSave = 0
+                autoSave(g)
+            }
         }
         _table.value = TableModel(
             module = g.module,
@@ -330,9 +381,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             lan = g.lan,
         )
         if (g.module.currentSeat(snap.state) == null) {
-            // Finished games don't need their save any more.
+            // Finished games don't need their saves any more.
             currentSaveId?.let { id -> viewModelScope.launch(Dispatchers.IO) { saveStore.delete(id) } }
             currentSaveId = null
+            deleteAutoSave()
         }
     }
 

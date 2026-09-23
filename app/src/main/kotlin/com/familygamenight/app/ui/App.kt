@@ -61,6 +61,8 @@ fun FamilyGameNightApp(vm: AppViewModel = viewModel()) {
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Castle.Night, androidx.compose.ui.graphics.Color(0xFF22160F), Castle.Night))),
     ) {
+        // Without this, plain Text falls back to black on our dark castle background.
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Castle.Parchment) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when (screen) {
                 Screen.Home -> HomeScreen(vm)
@@ -75,6 +77,7 @@ fun FamilyGameNightApp(vm: AppViewModel = viewModel()) {
                 Screen.Settings -> SettingsScreen(vm)
                 is Screen.Rules -> RulesScreen(vm, screen.gameId)
             }
+        }
         }
     }
 

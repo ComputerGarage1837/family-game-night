@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
+import com.familygamenight.core.cards.Card
+import com.familygamenight.core.cards.Suit
 import com.familygamenight.app.ui.initials
 import com.familygamenight.app.ui.theme.Castle
 import kotlin.math.PI
@@ -42,6 +44,15 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+
+/** What sits in the middle of the table. */
+sealed interface TableCenter {
+    /** Go Fish: a scattered pond of face-down cards. */
+    data class Pond(val count: Int, val glow: Boolean) : TableCenter
+
+    /** Draw deck plus a face-up discard pile (Crazy Eights and friends). */
+    data class Piles(val stockCount: Int, val top: Card, val calledSuit: Suit?, val glowStock: Boolean) : TableCenter
+}
 
 /** One person sitting at the table, as the scene needs to draw them. */
 data class SceneSeat(
@@ -78,20 +89,26 @@ fun seatAngles(count: Int, viewer: Int): Map<Int, Float> {
 fun TableScene(
     seats: List<SceneSeat>,
     viewer: Int,
-    pondCount: Int,
+    center: TableCenter,
     modifier: Modifier = Modifier,
     onSeatTap: (Int) -> Unit = {},
+    onCenterTap: () -> Unit = {},
 ) {
     val measurer = rememberTextMeasurer()
     val anim = rememberInfiniteTransition(label = "scene")
     val t by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(4000, easing = LinearEasing), RepeatMode.Restart), label = "t")
     val hits = remember { mutableMapOf<Int, Pair<Offset, Float>>() }
+    val centerHit = remember { mutableListOf<Pair<Offset, Float>>() }
 
     Canvas(
         modifier
             .fillMaxSize()
-            .pointerInput(seats) {
+            .pointerInput(seats, center) {
                 detectTapGestures { p ->
+                    if (centerHit.any { (c, r) -> (c - p).getDistance() <= r }) {
+                        onCenterTap()
+                        return@detectTapGestures
+                    }
                     hits.entries
                         .filter { (_, v) -> (v.first - p).getDistance() <= v.second }
                         .minByOrNull { (_, v) -> (v.first - p).getDistance() }
@@ -114,7 +131,11 @@ fun TableScene(
         hits.clear()
         behind.forEach { drawSeatPerson(cam, it, angles.getValue(it.index), t, measurer, hits, scale) }
         drawRoundTable(cam)
-        drawPond(cam, pondCount, measurer)
+        centerHit.clear()
+        when (center) {
+            is TableCenter.Pond -> drawPond(cam, center, t, measurer, centerHit)
+            is TableCenter.Piles -> drawPiles(cam, center, t, measurer, centerHit)
+        }
         opponents.forEach { drawBooks(cam, it, angles.getValue(it.index), measurer) }
         beside.forEach { drawSeatPerson(cam, it, angles.getValue(it.index), t, measurer, hits, scale) }
         opponents.forEach { drawFloatingHand(cam, it, angles.getValue(it.index), t, measurer) }
@@ -228,9 +249,26 @@ private fun DrawScope.drawBooks(cam: Camera, s: SceneSeat, angle: Float, measure
     }
 }
 
-private fun DrawScope.drawPond(cam: Camera, count: Int, measurer: TextMeasurer) {
-    val shown = min(count, 18)
+/** A soft pulsing ring on the table – "you can tap here" without shouting about it. */
+private fun DrawScope.drawGlowRing(cam: Camera, center: V3, radius: Float, t: Float) {
+    val pulse = 0.5f + 0.5f * sin(t * TAU * 1.5f)
+    val ring = (0 until 48).map { i -> cam.project(center + V3.onCircle(i * TAU / 48, radius, 0f)) }
+    drawPath(pathOf(ring), Castle.GoldPale.copy(alpha = 0.18f + 0.3f * pulse), style = Stroke(cam.focal * 0.006f))
+    drawPath(pathOf(ring), Castle.GoldPale.copy(alpha = 0.08f + 0.12f * pulse), style = Stroke(cam.focal * 0.018f))
+}
+
+private fun DrawScope.drawLabel(cam: Camera, at: V3, text: String, measurer: TextMeasurer, scale: Float = 0.06f) {
+    val p = cam.project(at)
+    val size = cam.pixelsPerUnit(at) * scale
+    val layout = measurer.measure(text, TextStyle(fontSize = (size / density / fontScale).sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = Castle.GoldPale))
+    drawRoundRect(Color(0x99000000), Offset(p.x - layout.size.width / 2f - 10, p.y - layout.size.height / 2f - 3), Size(layout.size.width + 20f, layout.size.height + 6f), CornerRadius(12f))
+    drawText(layout, topLeft = Offset(p.x - layout.size.width / 2f, p.y - layout.size.height / 2f))
+}
+
+private fun DrawScope.drawPond(cam: Camera, pond: TableCenter.Pond, t: Float, measurer: TextMeasurer, hit: MutableList<Pair<Offset, Float>>) {
+    val shown = min(pond.count, 18)
     val rnd = java.util.Random(1234)
+    if (pond.glow) drawGlowRing(cam, V3(0f, 0.003f, 0f), 0.4f, t)
     repeat(shown) {
         val a = rnd.nextFloat() * TAU
         val r = kotlin.math.sqrt(rnd.nextFloat()) * 0.3f
@@ -239,12 +277,44 @@ private fun DrawScope.drawPond(cam: Camera, count: Int, measurer: TextMeasurer) 
         drawCardBack(quad, outline = 1.2f)
     }
     // On the far side of the pond, so the player's own hand never covers it.
-    val labelAt = cam.project(V3(0f, 0f, -0.42f))
-    val text = if (count > 0) "Pond · $count" else "Pond is empty"
-    val size = cam.pixelsPerUnit(V3(0f, 0f, -0.42f)) * 0.06f
-    val layout = measurer.measure(text, TextStyle(fontSize = (size / density / fontScale).sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = Castle.GoldPale))
-    drawRoundRect(Color(0x99000000), Offset(labelAt.x - layout.size.width / 2f - 10, labelAt.y - layout.size.height / 2f - 3), Size(layout.size.width + 20f, layout.size.height + 6f), CornerRadius(12f))
-    drawText(layout, topLeft = Offset(labelAt.x - layout.size.width / 2f, labelAt.y - layout.size.height / 2f))
+    drawLabel(cam, V3(0f, 0f, -0.42f), if (pond.count > 0) "Pond · ${pond.count}" else "Pond is empty", measurer)
+    hit += cam.project(V3(0f, 0f, 0f)) to cam.pixelsPerUnit(V3(0f, 0f, 0f)) * 0.42f
+}
+
+private val STOCK_AT = V3(-0.24f, 0f, -0.02f)
+private val DISCARD_AT = V3(0.22f, 0f, -0.02f)
+
+private fun DrawScope.drawPiles(cam: Camera, piles: TableCenter.Piles, t: Float, measurer: TextMeasurer, hit: MutableList<Pair<Offset, Float>>) {
+    // Draw deck: a neat stack of backs.
+    if (piles.glowStock) drawGlowRing(cam, STOCK_AT, 0.2f, t)
+    val layers = min(6, (piles.stockCount + 7) / 8)
+    for (i in 0 until layers) {
+        val q = flatCardCorners(STOCK_AT + V3(0f, 0.006f + i * 0.007f, 0f), 0.17f, 0.24f, 0.08f).map { cam.project(it) }
+        drawCardBack(q, outline = 1.4f)
+    }
+    drawLabel(cam, STOCK_AT + V3(0f, 0f, -0.2f), if (piles.stockCount > 0) "Deck · ${piles.stockCount}" else "Deck empty", measurer, 0.05f)
+    hit += cam.project(STOCK_AT) to cam.pixelsPerUnit(STOCK_AT) * 0.17f
+
+    // Discard pile: a couple of cards peeking out under the face-up top card.
+    for ((i, yaw) in listOf(-0.35f, 0.25f).withIndex()) {
+        val q = flatCardCorners(DISCARD_AT + V3(0f, 0.005f + i * 0.002f, 0f), 0.17f, 0.24f, yaw).map { cam.project(it) }
+        drawCardFaceFlat(q)
+    }
+    val topQuad = flatCardCorners(DISCARD_AT + V3(0f, 0.01f, 0f), 0.17f, 0.24f, -0.05f).map { cam.project(it) }
+    drawCardFaceFlat(topQuad)
+    val c = centroid(topQuad)
+    val ink = if (piles.top.suit.isRed) Castle.CardRed else Castle.CardBlack
+    val ppu = cam.pixelsPerUnit(DISCARD_AT)
+    drawCentredText(measurer, piles.top.rank.label + piles.top.suit.symbol, c, ppu * 0.075f, ink, bold = true)
+
+    // An eight's called suit.
+    piles.calledSuit?.let { suit ->
+        val at = cam.project(DISCARD_AT + V3(0.17f, 0.02f, -0.13f))
+        val r = ppu * 0.055f
+        drawCircle(Castle.Parchment, r, at)
+        drawCircle(Castle.Gold, r, at, style = Stroke(r * 0.15f))
+        drawCentredText(measurer, suit.symbol, at, r * 1.25f, if (suit.isRed) Castle.CardRed else Castle.CardBlack, bold = true)
+    }
 }
 
 private fun DrawScope.drawBubble(cam: Camera, angle: Float, text: String, measurer: TextMeasurer, scale: Float) {

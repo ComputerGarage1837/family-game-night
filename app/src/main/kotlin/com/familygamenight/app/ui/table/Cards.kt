@@ -44,7 +44,7 @@ import kotlin.math.abs
 import kotlin.math.sin
 
 @Composable
-fun CardFace(card: Card, width: Dp, highlighted: Boolean, modifier: Modifier = Modifier) {
+fun CardFace(card: Card, width: Dp, highlighted: Boolean, modifier: Modifier = Modifier, glow: Float = 0f) {
     val height = width * 1.42f
     val ink = if (card.suit.isRed) Castle.CardRed else Castle.CardBlack
     val corner = (width.value * 0.25f).sp
@@ -54,7 +54,15 @@ fun CardFace(card: Card, width: Dp, highlighted: Boolean, modifier: Modifier = M
             .shadow(if (highlighted) 14.dp else 6.dp, RoundedCornerShape(width * 0.1f))
             .clip(RoundedCornerShape(width * 0.1f))
             .background(Color(0xFFFBF7EE))
-            .border(if (highlighted) 3.dp else 1.dp, if (highlighted) Castle.Gold else Color(0xFFB9A98A), RoundedCornerShape(width * 0.1f)),
+            .border(
+                if (highlighted) 3.dp else if (glow > 0f) 2.5.dp else 1.dp,
+                when {
+                    highlighted -> Castle.Gold
+                    glow > 0f -> Castle.Gold.copy(alpha = 0.35f + 0.65f * glow)
+                    else -> Color(0xFFB9A98A)
+                },
+                RoundedCornerShape(width * 0.1f),
+            ),
     ) {
         Column(Modifier.align(Alignment.TopStart).padding(start = width * 0.07f, top = width * 0.04f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(card.rank.label, color = ink, fontSize = corner, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Serif, lineHeight = corner)
@@ -78,18 +86,21 @@ fun CardFace(card: Card, width: Dp, highlighted: Boolean, modifier: Modifier = M
 
 /**
  * The viewer's own cards, floating in front of them and tilted back slightly like they're held
- * up over the table edge. Tapping picks a rank; all cards of that rank lift up.
+ * up over the table edge. [lifted] cards rise up (selected); [glowing] cards get a soft pulsing
+ * gold edge – a gentle hint at what can be played or handed over.
  */
 @Composable
 fun FloatingHand(
     cards: List<Card>,
-    selectedRank: Rank?,
+    lifted: (Card) -> Boolean,
+    glowing: (Card) -> Boolean,
     enabled: Boolean,
     onTap: (Card) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val anim = rememberInfiniteTransition(label = "hand")
     val t by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(3600, easing = LinearEasing), RepeatMode.Restart), label = "bob")
+    val glowPulse = 0.5f + 0.5f * sin(t * 2 * PI * 2).toFloat()
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val n = cards.size.coerceAtLeast(1)
@@ -99,13 +110,15 @@ fun FloatingHand(
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             cards.forEachIndexed { i, card ->
                 val off = i - (n - 1) / 2f
-                val lifted = card.rank == selectedRank
-                val lift by animateDpAsState(if (lifted) cardW * 0.32f else 0.dp, label = "lift")
+                val up = lifted(card)
+                val glow = glowing(card)
+                val lift by animateDpAsState(if (up) cardW * 0.32f else if (glow) cardW * 0.08f else 0.dp, label = "lift")
                 val bob = sin((t + i * 0.07f) * 2 * PI).toFloat() * 3f
                 CardFace(
                     card,
                     cardW,
-                    highlighted = lifted,
+                    highlighted = up,
+                    glow = if (glow && !up) glowPulse else 0f,
                     modifier = Modifier
                         .offset(x = step * off, y = (abs(off) * abs(off) * 0.9f).dp - lift - 6.dp)
                         .graphicsLayer {

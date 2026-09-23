@@ -24,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.familygamenight.app.data.AiSpeed
 import com.familygamenight.app.ui.AppViewModel
 import com.familygamenight.app.ui.Avatar
 import com.familygamenight.app.ui.Screen
@@ -100,6 +102,14 @@ fun GameScreen(vm: AppViewModel) {
     Box(Modifier.fillMaxSize()) {
         when (model.module.info.id) {
             "go_fish" -> GoFishTable(
+                model = model,
+                avatars = avatars,
+                colorOf = colorOf,
+                onAction = { vm.act(it) },
+                onPlayAgain = if (model.isHost) ({ vm.rematch() }) else null,
+                onHome = { vm.quitGame(save = false) },
+            )
+            "crazy_eights" -> CrazyEightsTable(
                 model = model,
                 avatars = avatars,
                 colorOf = colorOf,
@@ -217,26 +227,37 @@ private fun PassDeviceCover(seat: Seat, avatar: androidx.compose.ui.graphics.Ima
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GameMenu(model: TableModel, vm: AppViewModel, onClose: () -> Unit) {
     var confirmQuit by remember { mutableStateOf(false) }
+    val speed by vm.aiSpeed.collectAsState()
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(model.module.info.name) },
         text = {
-            Column(Modifier.widthIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Scrolls, so nothing gets cut off on a short landscape screen.
+            Column(Modifier.widthIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val wide = Modifier.fillMaxWidth()
                 Button(onClick = onClose, modifier = wide) { Text("Back to the game") }
                 OutlinedButton(onClick = { onClose(); vm.go(Screen.Rules(model.module.info.id)) }, modifier = wide) { Text("How to play") }
+                if (model.isHost && model.seats.any { it.kind == com.familygamenight.core.session.SeatKind.AI }) {
+                    Text("Computer speed", fontSize = 13.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AiSpeed.entries.forEach { sp ->
+                            FilterChip(selected = speed == sp, onClick = { vm.setAiSpeed(sp) }, label = { Text(sp.label) })
+                        }
+                    }
+                }
                 if (model.isHost) {
                     OutlinedButton(onClick = { vm.saveGame(); onClose() }, modifier = wide) { Text("Save game") }
-                    OutlinedButton(onClick = { vm.quitGame(save = true) }, modifier = wide) { Text("Save & quit") }
-                    TextButton(onClick = { confirmQuit = true }, modifier = wide) {
-                        Text("Quit without saving", color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = { vm.quitGame(save = true) }, modifier = wide) { Text("Save & quit to menu") }
+                    OutlinedButton(onClick = { confirmQuit = true }, modifier = wide) {
+                        Text("Quit to menu (don't save)", color = MaterialTheme.colorScheme.error)
                     }
                 } else {
                     Text("Only the host can save – the game lives on their device.", fontSize = 12.sp, textAlign = TextAlign.Center)
-                    TextButton(onClick = { confirmQuit = true }, modifier = wide) {
+                    OutlinedButton(onClick = { confirmQuit = true }, modifier = wide) {
                         Text("Leave game", color = MaterialTheme.colorScheme.error)
                     }
                 }
@@ -258,7 +279,7 @@ private fun GameMenu(model: TableModel, vm: AppViewModel, onClose: () -> Unit) {
                 Button(
                     onClick = { vm.quitGame(save = false) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text(if (model.isHost) "Quit" else "Leave") }
+                ) { Text(if (model.isHost) "Quit to menu" else "Leave") }
             },
             dismissButton = { TextButton(onClick = { confirmQuit = false }) { Text("Stay") } },
         )

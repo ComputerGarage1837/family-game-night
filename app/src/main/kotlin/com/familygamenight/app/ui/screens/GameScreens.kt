@@ -66,7 +66,7 @@ fun PickGameScreen(vm: AppViewModel, lan: Boolean) {
                     vm.go(Screen.Setup(info.id, lan))
                 }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🐟", fontSize = 40.sp)
+                        Text(if (info.id == "go_fish") "🐟" else "🃏", fontSize = 40.sp)
                         Column(Modifier.weight(1f).padding(start = 14.dp)) {
                             Text(info.name, style = MaterialTheme.typography.headlineSmall, color = Castle.GoldPale)
                             Text(info.tagline)
@@ -383,6 +383,7 @@ fun SavesScreen(vm: AppViewModel) {
             saves.forEach { sv ->
                 Panel {
                     Text(sv.title, style = MaterialTheme.typography.titleMedium, color = Castle.GoldPale)
+                    if (sv.auto) Text("Auto-saved (in case the game was interrupted)", fontSize = 12.sp, color = Castle.Parchment.copy(alpha = 0.7f))
                     val date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
                         .format(java.util.Date(sv.savedAtMillis))
                     Text("$date · ${if (sv.lan) "Wi-Fi game" else "This device"}", fontSize = 13.sp)
@@ -404,9 +405,19 @@ fun SavesScreen(vm: AppViewModel) {
 fun SettingsScreen(vm: AppViewModel) {
     var auto by remember { mutableStateOf(vm.settings.autoCheckUpdates) }
     val update by vm.update.collectAsState()
+    val speed by vm.aiSpeed.collectAsState()
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("Settings", onBack = { vm.back() })
-        Column(Modifier.widthIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.widthIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Panel {
+                Text("Computer player speed", style = MaterialTheme.typography.titleMedium)
+                Text("How long computer players take over each move, so you can follow what they do.", fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.familygamenight.app.data.AiSpeed.entries.forEach { sp ->
+                        FilterChip(selected = speed == sp, onClick = { vm.setAiSpeed(sp) }, label = { Text(sp.label) })
+                    }
+                }
+            }
             Panel {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

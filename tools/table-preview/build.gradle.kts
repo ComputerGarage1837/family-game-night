@@ -19,6 +19,7 @@ val copyShared by tasks.registering(Sync::class) {
         include(
             "TableModel.kt", "Components.kt", "theme/Theme.kt",
             "table/Camera.kt", "table/CastleScene.kt", "table/TableScene.kt", "table/Cards.kt", "table/GoFishTable.kt",
+            "table/CrazyEightsTable.kt", "table/TableWidgets.kt",
         )
     }
     into(shared.map { it.dir("com/familygamenight/app/ui") })
