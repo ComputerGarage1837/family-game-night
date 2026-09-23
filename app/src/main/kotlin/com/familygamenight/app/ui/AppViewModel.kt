@@ -107,13 +107,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** profileId -> picture, for everyone we know about (local users and LAN players). */
     val avatars: StateFlow<Map<String, ImageBitmap>> = _avatars.asStateFlow()
 
-    init {
-        if (currentProfile == null) switchUser(_profiles.value.firstOrNull()?.id)
-        if (_profiles.value.isEmpty()) go(Screen.EditProfile(null))
-        reloadLocalAvatars()
-        if (settings.autoCheckUpdates) checkForUpdates(manual = false)
-    }
-
     private fun reloadLocalAvatars() {
         viewModelScope.launch {
             val map = withContext(Dispatchers.IO) {
@@ -497,6 +490,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _update.value = UpdateState.Failed("Download failed: ${e.message ?: "unknown error"}")
             }
         }
+    }
+
+    // Kept last: Kotlin runs initialisers top to bottom, and this uses state declared above.
+    init {
+        if (currentProfile == null) switchUser(_profiles.value.firstOrNull()?.id)
+        if (_profiles.value.isEmpty()) go(Screen.EditProfile(null))
+        reloadLocalAvatars()
+        if (settings.autoCheckUpdates) checkForUpdates(manual = false)
     }
 
     override fun onCleared() {
