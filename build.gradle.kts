@@ -1,8 +1,3 @@
-// Plugin versions live in settings.gradle.kts. Declaring the Kotlin plugins here (not applied)
-// makes every module share one copy of them.
-plugins {
-    id("org.jetbrains.kotlin.jvm") apply false
-    id("org.jetbrains.kotlin.android") apply false
-    id("org.jetbrains.kotlin.plugin.compose") apply false
-    id("org.jetbrains.kotlin.plugin.serialization") apply false
-}
+// Plugin versions live in settings.gradle.kts; each module applies what it needs.
+// (Gradle warns that the Kotlin plugin is loaded per module. That's expected: declaring it here
+// would also need the Android plugin here, which the Android-free CORE_ONLY build can't resolve.)
