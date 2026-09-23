@@ -29,13 +29,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.familygamenight.app.ui.theme.Castle
+import com.familygamenight.app.ui.theme.PlayerPalette
 
 fun initials(name: String): String =
     name.split(' ', '-').filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifEmpty { "?" }
 
 /** Stable fallback colour for players without a stored colour (AI, remote players). */
 fun colorFor(key: String): Color {
-    val palette = com.familygamenight.app.data.ProfileStore.palette
+    val palette = PlayerPalette
     return Color(palette[Math.floorMod(key.hashCode(), palette.size)])
 }
 

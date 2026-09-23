@@ -26,6 +26,12 @@ object Castle {
     val CardBlack = Color(0xFF1B1B1B)
 }
 
+/** Colours players can pick (ARGB), also used for computer and remote players. */
+val PlayerPalette = listOf(
+    0xFFB23A48, 0xFF3A6EA5, 0xFF4E8C4A, 0xFFD08C2B, 0xFF7B4FA0,
+    0xFF2F8F8A, 0xFFC0567E, 0xFF6B5B3E, 0xFF3D4F9F, 0xFF9C3D22,
+)
+
 private val scheme = darkColorScheme(
     primary = Castle.Gold,
     onPrimary = Castle.Ink,

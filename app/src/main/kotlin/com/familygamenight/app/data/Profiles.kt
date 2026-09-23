@@ -82,10 +82,7 @@ class ProfileStore(private val context: Context) {
     }
 
     companion object {
-        val palette = listOf(
-            0xFFB23A48, 0xFF3A6EA5, 0xFF4E8C4A, 0xFFD08C2B, 0xFF7B4FA0,
-            0xFF2F8F8A, 0xFFC0567E, 0xFF6B5B3E, 0xFF3D4F9F, 0xFF9C3D22,
-        )
+        val palette = com.familygamenight.app.ui.theme.PlayerPalette
 
         fun decodeNetworkAvatar(b64: String): Bitmap? = runCatching {
             val bytes = Base64.decode(b64, Base64.DEFAULT)

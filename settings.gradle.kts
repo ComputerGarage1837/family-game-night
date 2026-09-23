@@ -39,3 +39,5 @@ rootProject.name = "family-game-night"
 include(":core")
 // The Android app. Set CORE_ONLY=1 to build/test the engine without the Android SDK.
 if (System.getenv("CORE_ONLY") == null) include(":app")
+// Desktop renderer for table screenshots (used by CI). Set TABLE_PREVIEW=1 to include it.
+if (System.getenv("TABLE_PREVIEW") != null) include(":tools:table-preview")

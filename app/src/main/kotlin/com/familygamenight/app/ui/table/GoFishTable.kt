@@ -162,7 +162,7 @@ private fun bubblesFor(view: GoFishView, names: List<String>): Map<Int, String> 
             is GoFishEvent.Ask -> out[e.asker] = "${names[e.target]}, got any ${e.rank.plural}?"
             is GoFishEvent.Give -> out[e.from] = if (e.count == 1) "Here's one." else "Here – ${e.count} of them."
             is GoFishEvent.GoFish -> out[e.target] = "Go fish! 🐟"
-            is GoFishEvent.Draw -> if (e.luckyRank != null) out[e.player] = "Lucky catch – a ${e.luckyRank.singular}!"
+            is GoFishEvent.Draw -> e.luckyRank?.let { out[e.player] = "Lucky catch – a ${it.singular}!" }
             is GoFishEvent.Book -> out[e.player] = "A book of ${e.rank.plural}!"
             else -> Unit
         }
@@ -192,10 +192,15 @@ private fun lastHappening(view: GoFishView, names: List<String>): String? {
                 is GoFishEvent.Ask -> parts += "${n(e.asker)} asked ${obj(e.target)} for ${e.rank.plural}"
                 is GoFishEvent.Give -> parts += "got ${e.count}"
                 is GoFishEvent.GoFish -> parts += "Go fish!"
-                is GoFishEvent.Draw -> if (e.player == view.seat) {
-                    parts += if (e.luckyRank != null) "you caught the ${view.lastDrawn ?: e.luckyRank.singular} – go again!"
-                    else "you drew ${view.lastDrawn ?: "a card"}"
-                } else if (e.luckyRank != null) parts += "lucky catch!"
+                is GoFishEvent.Draw -> {
+                    val lucky = e.luckyRank
+                    if (e.player == view.seat) {
+                        parts += if (lucky != null) "you caught the ${view.lastDrawn ?: lucky.singular} – go again!"
+                        else "you drew ${view.lastDrawn ?: "a card"}"
+                    } else if (lucky != null) {
+                        parts += "lucky catch!"
+                    }
+                }
                 is GoFishEvent.Book -> parts += "${n(e.player)} made a book of ${e.rank.plural}"
                 is GoFishEvent.PondEmpty -> parts += "the pond is empty"
                 else -> Unit
