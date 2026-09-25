@@ -586,6 +586,10 @@ const S3 = (() => {
   // ----- load the model (embedded in the page) -----
   const b64 = $('glb64').textContent.trim();
   const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+  // The loader normally fetches embedded textures through blob: URLs, which the page's security policy
+  // blocks. Hiding createImageBitmap while the parser is created makes it decode them as plain images.
+  const cib = window.createImageBitmap;
+  try { window.createImageBitmap = undefined; } catch (e) { /* read-only in some browsers */ }
   new THREE.GLTFLoader().parse(bin, '', (gltf) => {
     F = { me: buildFox(gltf.scene), foe: buildFox(gltf.scene) };
     scene.add(F.me.container); scene.add(F.foe.container);
@@ -593,5 +597,6 @@ const S3 = (() => {
     $('veil').hidden = true;
     reset(true);
   }, (err) => { $('veil').textContent = 'The model could not be read: ' + (err && err.message || err); });
+  window.createImageBitmap = cib;
 })();
 </script>
