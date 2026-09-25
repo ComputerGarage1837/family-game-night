@@ -1,0 +1,1126 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}</style></head><body><title>Rowan the Knight</title>
+<!-- Sprite study for an Ogre Battle 64-style idle battler. Everything is drawn by the renderer in the first
+     script (shapes on a skeleton -> per-pixel lighting -> colour ramps + outlines); there are no image files.
+     Open this file in any browser. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=Marcellus+SC&family=Silkscreen&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #0a0e1c;
+    --ink-2: #111833;
+    --win-top: #1b2757;
+    --win-bot: #0e1531;
+    --edge: #8a9bd0;
+    --edge-dim: #2a3768;
+    --text: #ece6d6;
+    --muted: #a4adc9;
+    --gold: #e4bd55;
+    --gold-dim: #8a6a22;
+    --hp: #6fc36a;
+    --hp-low: #d9534a;
+    --display: "Marcellus SC", "Palatino Linotype", Palatino, Georgia, serif;
+    --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+    --pixel: "Silkscreen", ui-monospace, "Courier New", monospace;
+  }
+  body {
+    background: radial-gradient(120% 60% at 50% 0%, #16204a 0%, var(--ink) 60%) fixed, var(--ink);
+    color: var(--text);
+    font: 16px/1.55 var(--body);
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; display: grid; gap: 22px; }
+
+  header { display: grid; gap: 6px; }
+  .eyebrow { margin: 0; font: 11px/1 var(--pixel); letter-spacing: .08em; color: var(--gold); text-transform: uppercase; }
+  h1 { margin: 0; font: 400 clamp(34px, 6vw, 52px)/1.02 var(--display); letter-spacing: .01em; text-wrap: balance; }
+  h1 small { font-size: .5em; color: var(--muted); letter-spacing: .06em; margin-left: .35em; }
+  .lede { margin: 0; max-width: 64ch; color: var(--muted); }
+  .lede b { color: var(--text); font-weight: 500; }
+
+  /* OB64-style window: navy gradient with a light inner rule */
+  .win {
+    background: linear-gradient(180deg, var(--win-top), var(--win-bot));
+    border: 1px solid var(--edge);
+    box-shadow: inset 0 0 0 2px var(--edge-dim), 0 10px 30px rgba(0, 0, 0, .35);
+    border-radius: 4px;
+  }
+
+  .stage { padding: 6px; display: grid; gap: 6px; }
+  .stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 224 / 126; image-rendering: pixelated; border-radius: 2px; background: #1a2448; }
+
+  .status { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .plate { padding: 8px 12px 10px; display: grid; gap: 4px; background: rgba(8, 12, 30, .55); border: 1px solid var(--edge-dim); border-radius: 2px; }
+  .plate .who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .plate .name { font: 17px/1.1 var(--display); }
+  .plate .cls { font: 10px/1 var(--pixel); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .bar { height: 7px; background: #05070f; border: 1px solid #2d3a66; position: relative; }
+  .bar > i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #9ee48f, var(--hp) 55%, #3f8a3b); transition: width .25s steps(6); }
+  .bar.low > i { background: linear-gradient(180deg, #f08a78, var(--hp-low) 55%, #8f2a24); }
+  .hpnum { font: 10px/1 var(--pixel); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
+  .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .group-label { font: 10px/1 var(--pixel); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-right: 2px; }
+  button {
+    font: 500 15px/1 var(--body); color: var(--text); cursor: pointer;
+    background: linear-gradient(180deg, #243372, #151f49); border: 1px solid var(--edge-dim);
+    padding: 9px 13px 9px 20px; border-radius: 3px; position: relative;
+  }
+  button::before { content: ""; position: absolute; left: 8px; top: 50%; width: 0; height: 0; margin-top: -4px; border: 4px solid transparent; border-left-color: transparent; }
+  button:hover { border-color: var(--edge); }
+  button[aria-pressed="true"] { border-color: var(--gold); color: #fff6dc; }
+  button[aria-pressed="true"]::before { border-left-color: var(--gold); }
+  button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(255, 255, 255, .35); }
+
+  .tally { margin: 0; font: 11px/1.6 var(--pixel); color: var(--muted); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .tally b { color: var(--gold); font-weight: 400; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 22px; }
+  .panel { padding: 18px 18px 20px; display: grid; gap: 12px; align-content: start; }
+  h2 { margin: 0; font: 400 22px/1.15 var(--display); text-wrap: balance; }
+  .panel p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+  .tile { background: repeating-conic-gradient(#172042 0 25%, #131b39 0 50%) 0 0 / 16px 16px; border: 1px solid var(--edge-dim); border-radius: 2px; }
+  canvas.px { image-rendering: pixelated; display: block; }
+  figure { margin: 0; display: grid; gap: 6px; justify-items: start; }
+  figcaption { font: 10px/1.3 var(--pixel); color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+  figcaption b { color: var(--text); font-weight: 400; }
+
+  .sizes { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
+  .pipe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .pipe canvas { width: 100%; height: auto; aspect-ratio: 1; }
+  .pipe figure { justify-items: stretch; }
+  .pipe figcaption { text-transform: none; font: 13px/1.35 var(--body); letter-spacing: 0; }
+  .pipe figcaption b { display: block; font: 10px/1.4 var(--pixel); text-transform: uppercase; letter-spacing: .06em; color: var(--gold); }
+
+  .strip { overflow-x: auto; padding-bottom: 6px; }
+  .strip-row { display: flex; gap: 8px; width: max-content; }
+  .strip canvas { width: 144px; height: 144px; }
+  .strip figcaption b { display: block; }
+
+  dl.specs { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 18px; }
+  dl.specs div { display: grid; gap: 3px; padding-top: 8px; border-top: 1px solid var(--edge-dim); }
+  dt { font: 10px/1.3 var(--pixel); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  dd { margin: 0; font: 400 20px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+  .palette { display: flex; flex-wrap: wrap; gap: 2px; }
+  .palette i { width: 14px; height: 14px; display: block; }
+
+  @media (max-width: 720px) {
+    .two { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .status { grid-template-columns: 1fr; }
+    .controls { justify-content: flex-start; }
+    .group { width: 100%; }
+    .group-label { flex-basis: 100%; margin-bottom: 2px; }
+    dl.specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pipe { gap: 6px; }
+    .pipe figcaption { font-size: 12px; }
+    .strip canvas { width: 120px; height: 120px; }
+  }
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="eyebrow">Sprite study · idle battler</p>
+    <h1>Rowan <small>Knight · Lv 12</small></h1>
+    <p class="lede">An original character in the spirit of Ogre Battle 64's battle sprites. <b>Every pixel is computed by code on this page</b>: no image files, no drawing app. The knight fights a training dummy on a loop, the way an idle game plays itself.</p>
+  </header>
+
+  <section class="win stage" aria-label="Battle scene">
+    <canvas id="stage" width="224" height="126" role="img" aria-label="Rowan the knight facing a straw training dummy on a grassy field below snowy mountains"></canvas>
+    <div class="status">
+      <div class="plate">
+        <div class="who"><span class="name">Rowan</span><span class="cls">Knight · Front row</span></div>
+        <div class="bar" id="kbar"><i style="width:100%"></i></div>
+        <span class="hpnum" id="khp">HP 342 / 342</span>
+      </div>
+      <div class="plate">
+        <div class="who"><span class="name">Training Dummy</span><span class="cls">Straw · Target</span></div>
+        <div class="bar" id="dbar"><i style="width:100%"></i></div>
+        <span class="hpnum" id="dhp">HP 800 / 800</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <div class="group" role="group" aria-label="Actions">
+      <span class="group-label">Actions</span>
+      <button id="b-auto" type="button" aria-pressed="true">Auto battle</button>
+      <button id="b-attack" type="button" aria-pressed="false">Attack</button>
+      <button id="b-hurt" type="button" aria-pressed="false">Take a hit</button>
+      <button id="b-victory" type="button" aria-pressed="false">Victory</button>
+    </div>
+    <div class="group" role="group" aria-label="Colours">
+      <span class="group-label">Colours</span>
+      <button id="f-azure" type="button" aria-pressed="true"><span class="swatch" style="background:#2c52b6"></span>Azure</button>
+      <button id="f-crimson" type="button" aria-pressed="false"><span class="swatch" style="background:#a4232b"></span>Crimson</button>
+      <button id="f-onyx" type="button" aria-pressed="false"><span class="swatch" style="background:#652587"></span>Onyx</button>
+    </div>
+  </div>
+  <p class="tally">Damage dealt <b id="t-dmg">0</b> · Hits <b id="t-hits">0</b> · Crits <b id="t-crits">0</b> · Dummies broken <b id="t-broken">0</b></p>
+
+  <div class="two">
+    <section class="win panel" aria-labelledby="h-size">
+      <h2 id="h-size">At game size</h2>
+      <p>The sprite lives in a 96 × 96 pixel frame. On a battle screen it would sit around 1× to 2×; the big stage above is 4× or more.</p>
+      <div class="sizes">
+        <figure><canvas class="px tile" id="s1" width="96" height="96" style="width:96px;height:96px"></canvas><figcaption><b>1×</b></figcaption></figure>
+        <figure><canvas class="px tile" id="s2" width="96" height="96" style="width:192px;height:192px"></canvas><figcaption><b>2×</b></figcaption></figure>
+      </div>
+    </section>
+
+    <section class="win panel" aria-labelledby="h-how">
+      <h2 id="h-how">How it's drawn</h2>
+      <div class="pipe">
+        <figure><canvas class="px tile" id="p-flat" width="96" height="96"></canvas><figcaption><b>1 · Parts</b><span id="p-count">Simple shapes</span> on a posable skeleton.</figcaption></figure>
+        <figure><canvas class="px tile" id="p-lit" width="96" height="96"></canvas><figcaption><b>2 · Light</b>Each shape is shaded like a 3D surface.</figcaption></figure>
+        <figure><canvas class="px tile" id="p-px" width="96" height="96"></canvas><figcaption><b>3 · Pixel pass</b>Snapped to set colours, then outlined.</figcaption></figure>
+      </div>
+      <p>Because a frame is generated from a pose, a new animation is a handful of numbers, and a palette swap re-colours every frame at once.</p>
+    </section>
+  </div>
+
+  <section class="win panel" aria-labelledby="h-strip">
+    <h2 id="h-strip">The attack, frame by frame</h2>
+    <p>Runs at 16 frames per second. Like OB64's melee units, Rowan runs up to the target, strikes and hops back into formation.</p>
+    <div class="strip"><div class="strip-row" id="strip"></div></div>
+  </section>
+
+  <section class="win panel" aria-labelledby="h-spec">
+    <h2 id="h-spec">By the numbers</h2>
+    <dl class="specs">
+      <div><dt>Frame</dt><dd>96 × 96 px</dd></div>
+      <div><dt>Character height</dt><dd id="sp-h">–</dd></div>
+      <div><dt>Shapes per frame</dt><dd id="sp-parts">–</dd></div>
+      <div><dt>Colours in this frame</dt><dd id="sp-cols">–</dd></div>
+      <div><dt>Animations</dt><dd>4</dd></div>
+      <div><dt>Image files</dt><dd>0</dd></div>
+    </dl>
+    <div class="palette" id="palette" aria-label="Colours used in the current frame"></div>
+  </section>
+</main>
+
+<script>
+'use strict';
+/* In-code sprite renderer: characters are built from simple 3D-ish primitives
+   (tapered capsules, ellipsoids, bevelled polygons), lit per pixel, snapped to
+   hand-picked colour ramps and outlined. No image files anywhere. */
+
+// ---------- math ----------
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const mul = (a, k) => [a[0] * k, a[1] * k];
+const rot = (v, a) => { const c = Math.cos(a), s = Math.sin(a); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; };
+const T = (o, a, v) => add(o, rot(v, a));
+const dirOf = (a) => [Math.cos(a), Math.sin(a)];
+const norm3 = (n) => { const l = Math.hypot(n[0], n[1], n[2]) || 1; return [n[0] / l, n[1] / l, n[2] / l]; };
+const smooth = (t) => t * t * (3 - 2 * t);
+function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+
+// Two-bone IK: returns the middle joint (knee/elbow).
+function ik(root, target, l1, l2, bend) {
+  let d = sub(target, root);
+  let len = Math.hypot(d[0], d[1]);
+  const maxL = (l1 + l2) * 0.999;
+  if (len > maxL) { d = mul(d, maxL / len); target = add(root, d); len = maxL; }
+  len = Math.max(len, Math.abs(l1 - l2) + 0.01);
+  const a = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
+  const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  const u = mul(d, 1 / len);
+  const perp = [-u[1] * bend, u[0] * bend];
+  return { mid: add(add(root, mul(u, a)), mul(perp, h)), end: target };
+}
+
+// ---------- colour ramps (dark -> light) ----------
+const RAMPS = {
+  steel:   ['#10141d', '#222a39', '#384257', '#56637c', '#7f8ca6', '#aebbd0', '#dde6f2', '#ffffff'],
+  mail:    ['#101218', '#222631', '#383d4a', '#555b69', '#7b8290', '#a7adb8'],
+  skin:    ['#3a1b14', '#6a3626', '#9c5b42', '#c9835f', '#e6a986', '#f9d2b1'],
+  hair:    ['#140a08', '#2e170e', '#4f2915', '#763f1f', '#a15a2c', '#c9824a', '#e8b27a'],
+  leather: ['#140d09', '#2a1c13', '#44301f', '#624630', '#866343', '#a8845d'],
+  under:   ['#0e1018', '#1b1f2c', '#2a3042', '#3c4458', '#535d75', '#717c96'],
+  wood:    ['#170d06', '#321d0e', '#4e3117', '#6d4722', '#8f6231', '#b08045'],
+  straw:   ['#241c0c', '#483a1e', '#6d5d31', '#918044', '#b3a15c', '#d3c282'],
+  rope:    ['#1a120a', '#372715', '#574124', '#795c35', '#9b7b4c', '#bf9f69'],
+  paint:   ['#2b0709', '#57100f', '#861d18', '#b3302a', '#d65444', '#ee8a6e'],
+  white:   ['#262734', '#4f5264', '#80849a', '#aeb2c3', '#d6d9e4', '#f6f7fb'],
+};
+
+const FACTIONS = {
+  azure: {
+    label: 'Azure',
+    cloth: ['#0a1230', '#14235a', '#1f3789', '#2c52b6', '#4476d9', '#78a6f1'],
+    cape:  ['#21060b', '#470d16', '#731823', '#a0262e', '#c8433f', '#e9795e'],
+    trim:  ['#2b1b05', '#5a3c0b', '#906518', '#c4962b', '#e8c455', '#fff0a6'],
+    sigil: 'white',
+  },
+  crimson: {
+    label: 'Crimson',
+    cloth: ['#240509', '#4a0c14', '#78161f', '#a4232b', '#cb4140', '#ea7a66'],
+    cape:  ['#0b0b0f', '#18181f', '#262631', '#373745', '#4b4b5d', '#66667c'],
+    trim:  ['#221607', '#4a3212', '#7a5621', '#a87c34', '#cfa352', '#ecc985'],
+    sigil: 'trim',
+  },
+  onyx: {
+    label: 'Onyx',
+    cloth: ['#07060c', '#121019', '#1d1a28', '#2b2739', '#3d384f', '#565070'],
+    cape:  ['#14061c', '#2b0d3b', '#471660', '#652587', '#8540ab', '#ad70cf'],
+    trim:  ['#1b1d24', '#363a46', '#585e6e', '#7f8698', '#aab1c2', '#dde2ec'],
+    sigil: 'cape',
+  },
+};
+
+const MATS = {
+  steel:   { ramp: 'steel', metal: true, spec: 0.85, shin: 16 },
+  mail:    { ramp: 'mail', metal: true, spec: 0.35, shin: 6, noise: 0.07 },
+  skin:    { ramp: 'skin', amb: 0.34, spec: 0.08, shin: 12 },
+  hair:    { ramp: 'hair', amb: 0.22, spec: 0.32, shin: 12 },
+  leather: { ramp: 'leather', amb: 0.24, spec: 0.18, shin: 10 },
+  under:   { ramp: 'under', amb: 0.24 },
+  cloth:   { ramp: 'cloth', amb: 0.26, spec: 0.04, shin: 8 },
+  cape:    { ramp: 'cape', amb: 0.2 },
+  trim:    { ramp: 'trim', metal: true, spec: 0.75, shin: 10 },
+  sigil:   { ramp: 'sigil', amb: 0.4 },
+  wood:    { ramp: 'wood', amb: 0.26, noise: 0.05 },
+  straw:   { ramp: 'straw', amb: 0.3, noise: 0.06, stripe: 0.16 },
+  rope:    { ramp: 'rope', amb: 0.26 },
+  paint:   { ramp: 'paint', amb: 0.3 },
+};
+
+function rampsFor(factionKey) {
+  const f = FACTIONS[factionKey] || FACTIONS.azure;
+  const out = {};
+  for (const k in RAMPS) out[k] = RAMPS[k];
+  out.cloth = f.cloth; out.cape = f.cape; out.trim = f.trim;
+  out.sigil = f.sigil === 'white' ? RAMPS.white : f[f.sigil];
+  const rgb = {};
+  for (const k in out) rgb[k] = out[k].map(hexRGB);
+  return rgb;
+}
+
+// ---------- primitives ----------
+// Each sampler returns a surface normal [x,y,z] (z toward viewer) or null if outside.
+let EDGE_HIT = false;
+
+function sampleCap(p, x, y) {
+  const ax = p.a[0], ay = p.a[1], dx = p.b[0] - ax, dy = p.b[1] - ay;
+  const L2 = dx * dx + dy * dy || 1e-6;
+  let t = ((x - ax) * dx + (y - ay) * dy) / L2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const r = p.ra + (p.rb - p.ra) * t;
+  const ox = x - (ax + dx * t), oy = y - (ay + dy * t);
+  if (ox * ox + oy * oy > r * r) return null;
+  const nx = ox / r, ny = oy / r;
+  return [nx, ny, Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny))];
+}
+
+function sampleEll(p, x, y) {
+  const a = p.rot || 0, c = Math.cos(a), s = Math.sin(a);
+  const lx0 = x - p.c[0], ly0 = y - p.c[1];
+  const lx = lx0 * c + ly0 * s, ly = -lx0 * s + ly0 * c;
+  const qx = lx / p.rx, qy = ly / p.ry, q2 = qx * qx + qy * qy;
+  if (q2 > 1) return null;
+  return [qx * c - qy * s, qx * s + qy * c, Math.sqrt(1 - q2)];
+}
+
+function samplePoly(p, x, y) {
+  const pts = p.pts; let inside = false, minD = 1e9, cx = 0, cy = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    const ex = xi - xj, ey = yi - yj, l2 = ex * ex + ey * ey || 1e-6;
+    let t = ((x - xj) * ex + (y - yj) * ey) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const px = xj + ex * t, py = yj + ey * t, d = (x - px) * (x - px) + (y - py) * (y - py);
+    if (d < minD) { minD = d; cx = px; cy = py; }
+  }
+  if (!inside) return null;
+  const d = Math.sqrt(minD);
+  const n = p.n ? [p.n[0], p.n[1], p.n[2]] : [0, 0, 1];
+  if (p.nf) { const m = p.nf(x, y); n[0] += m[0]; n[1] += m[1]; n[2] += m[2]; }
+  const bev = p.bevel == null ? 1.4 : p.bevel;
+  if (bev > 0 && d < bev && d > 1e-4) {
+    const k = (1 - d / bev) * (p.bevelK == null ? 1 : p.bevelK);
+    n[0] += ((cx - x) / d) * k; n[1] += ((cy - y) / d) * k;
+  }
+  if (p.edgeW && d < p.edgeW) EDGE_HIT = true;
+  return norm3(n);
+}
+
+function bboxOf(p) {
+  if (p.type === 'cap') {
+    const r = Math.max(p.ra, p.rb);
+    return [Math.min(p.a[0], p.b[0]) - r, Math.min(p.a[1], p.b[1]) - r, Math.max(p.a[0], p.b[0]) + r, Math.max(p.a[1], p.b[1]) + r];
+  }
+  if (p.type === 'ell') { const r = Math.max(p.rx, p.ry); return [p.c[0] - r, p.c[1] - r, p.c[0] + r, p.c[1] + r]; }
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+  return [x0, y0, x1, y1];
+}
+
+const SAMPLERS = { cap: sampleCap, ell: sampleEll, poly: samplePoly };
+
+// ---------- lighting ----------
+const LIGHT = norm3([0.45, -0.72, 0.55]);
+function lightAt(m, n, x, y) {
+  const d = n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2];
+  const rx = 2 * n[2] * n[0], ry = 2 * n[2] * n[1], rz = 2 * n[2] * n[2] - 1;
+  const rl = Math.max(0, rx * LIGHT[0] + ry * LIGHT[1] + rz * LIGHT[2]);
+  let I;
+  if (m.metal) {
+    I = 0.1 + 0.52 * Math.max(0, d) + 0.24 * Math.max(0, -n[1]) + m.spec * Math.pow(rl, m.shin);
+  } else {
+    const amb = m.amb == null ? 0.26 : m.amb;
+    I = amb + (1 - amb) * Math.max(0, d * 0.82 + 0.18) + (m.spec || 0) * Math.pow(rl, m.shin || 10);
+  }
+  I += 0.16 * Math.max(0, -0.85 * n[0] - 0.35 * n[1] - 0.2 * n[2]);
+  if (m.noise) I += ((x + y) & 1) ? m.noise : -m.noise;
+  if (m.stripe) I += m.stripe * (hash2(Math.floor(x / 3), y) - 0.5) * 2;
+  return I;
+}
+
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+
+/* Rasterise parts into an RGBA buffer.
+   mode: 'pixel' (final), 'lit' (smooth shading, no palette), 'flat' (shapes only) */
+function renderParts(parts, W, H, opts) {
+  const mode = opts.mode || 'pixel';
+  const ramps = rampsFor(opts.faction);
+  const N = W * H;
+  const zb = new Float32Array(N).fill(-1e9);
+  const pid = new Int16Array(N).fill(-1);
+  const inten = new Float32Array(N);
+  const matOf = new Array(N);
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    const f = SAMPLERS[p.type];
+    const bb = bboxOf(p);
+    const x0 = Math.max(0, Math.floor(bb[0])), y0 = Math.max(0, Math.floor(bb[1]));
+    const x1 = Math.min(W - 1, Math.ceil(bb[2])), y1 = Math.min(H - 1, Math.ceil(bb[3]));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const k = y * W + x;
+      if (p.z < zb[k]) continue;
+      EDGE_HIT = false;
+      let n = f(p, x + 0.5, y + 0.5);
+      if (!n) continue;
+      if (p.flat) n = norm3([n[0] * (1 - p.flat), n[1] * (1 - p.flat), n[2] + p.flat]);
+      const mk = EDGE_HIT && p.edgeMat ? p.edgeMat : p.mat;
+      zb[k] = p.z; pid[k] = i; matOf[k] = mk;
+      inten[k] = lightAt(MATS[mk], n, x, y) + (p.bright || 0);
+    }
+  }
+
+  const out = new Uint8ClampedArray(N * 4);
+  const shadeIx = new Int8Array(N).fill(-1);
+  const dither = opts.dither == null ? 0.22 : opts.dither;
+  for (let k = 0; k < N; k++) {
+    if (pid[k] < 0) continue;
+    const ramp = ramps[MATS[matOf[k]].ramp];
+    const n = ramp.length;
+    if (mode === 'flat') {
+      const c = ramp[Math.floor(n / 2) - (pid[k] % 2)];
+      out.set([c[0], c[1], c[2], 255], k * 4);
+      continue;
+    }
+    const x = k % W, y = (k / W) | 0;
+    if (mode === 'lit') {
+      const v = clamp(inten[k], 0, 1) * (n - 1), i0 = Math.floor(v), i1 = Math.min(n - 1, i0 + 1), t = v - i0;
+      const a = ramp[i0], b = ramp[i1];
+      out.set([lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t), 255], k * 4);
+      continue;
+    }
+    const dth = (BAYER[(y & 3) * 4 + (x & 3)] - 0.5) * dither;
+    shadeIx[k] = clamp(Math.floor(inten[k] * n + dth), 0, n - 1);
+  }
+  if (mode !== 'pixel') { applyOverlays(out, W, H, opts.overlays, ramps, pid); return { rgba: out, pid, matOf }; }
+
+  // Occlusion lines: darken the back part where a different group sits in front of it.
+  const sh2 = Int8Array.from(shadeIx);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = y * W + x; if (pid[k] < 0) continue;
+    const me = parts[pid[k]];
+    let occl = false;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const q = pid[yy * W + xx]; if (q < 0) continue;
+      const o = parts[q];
+      if (o.g !== me.g && o.z > me.z + 0.05 && !o.noLine) { occl = true; break; }
+    }
+    if (occl) sh2[k] = Math.max(0, shadeIx[k] - (me.lineK || 2));
+  }
+  for (let k = 0; k < N; k++) {
+    if (pid[k] < 0) continue;
+    const c = ramps[MATS[matOf[k]].ramp][sh2[k]];
+    out[k * 4] = c[0]; out[k * 4 + 1] = c[1]; out[k * 4 + 2] = c[2]; out[k * 4 + 3] = 255;
+  }
+  // Outer outline: 1px, tinted by the material it borders.
+  const oc = new Uint8ClampedArray(out);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = y * W + x; if (pid[k] >= 0) continue;
+    let best = -1, bz = -1e9;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const q = yy * W + xx; if (pid[q] < 0) continue;
+      if (zb[q] > bz) { bz = zb[q]; best = q; }
+    }
+    if (best < 0) continue;
+    const d = ramps[MATS[matOf[best]].ramp][0];
+    oc[k * 4] = d[0] * 0.55; oc[k * 4 + 1] = d[1] * 0.55; oc[k * 4 + 2] = d[2] * 0.6; oc[k * 4 + 3] = 255;
+  }
+  applyOverlays(oc, W, H, opts.overlays, ramps, pid);
+  return { rgba: oc, pid, matOf };
+}
+
+function applyOverlays(buf, W, H, overlays, ramps, pid) {
+  if (!overlays) return;
+  for (const o of overlays) {
+    const x = Math.round(o.x), y = Math.round(o.y);
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    if (o.onlyOn != null && pid[y * W + x] < 0) continue;
+    const c = o.rgb || ramps[o.ramp][o.i];
+    const k = (y * W + x) * 4;
+    buf[k] = c[0]; buf[k + 1] = c[1]; buf[k + 2] = c[2]; buf[k + 3] = 255;
+  }
+}
+
+// ---------- the knight ----------
+const KNIGHT_W = 96, KNIGHT_H = 96;
+
+const READY = {
+  ox: 0, px: 43, py: 57, spine: 0.06, neck: 0,
+  footN: [34, 84], footF: [55, 84],
+  handN: [47, 52], swordA: -1.0, swordZ: 9.8,
+  handF: [58, 46], shieldA: 0.04,
+  cape: 0, wind: 0.5, hair: 0, blink: 0, flash: 0, mouth: 0,
+};
+
+function buildKnight(q) {
+  const P = [q.px, q.py], sp = q.spine;
+  const parts = [];
+  const push = (o) => { parts.push(o); return o; };
+  const cap = (a, b, ra, rb, mat, z, g, extra) => push(Object.assign({ type: 'cap', a, b, ra, rb, mat, z, g }, extra));
+  const ell = (c, rx, ry, rotA, mat, z, g, extra) => push(Object.assign({ type: 'ell', c, rx, ry, rot: rotA, mat, z, g }, extra));
+  const poly = (pts, mat, z, g, extra) => push(Object.assign({ type: 'poly', pts, mat, z, g }, extra));
+  const local = (x, y) => { const d = rot(sub([x, y], P), -sp); return d; };
+
+  const N = T(P, sp, [0.6, -21.5]);
+  const H = T(N, sp + q.neck, [1.4, -6.6]);
+  const hA = sp + q.neck;
+  const SN = T(P, sp, [-5.4, -19.2]);
+  const SF = T(P, sp, [4.4, -19.8]);
+  const HN = T(P, sp * 0.3, [-3, 1]);
+  const HF = T(P, sp * 0.3, [3.4, 0]);
+
+  // Cape (behind everything), flowing back-left with folds.
+  const w = q.wind, cph = q.cape;
+  const hem = (i, bx, by) => [P[0] + bx - w * (2 + i * 0.6) + Math.sin(cph + i * 1.3) * 1.1, P[1] + by + Math.cos(cph * 0.8 + i) * 0.8];
+  const capeTop = Math.min(SN[1], SF[1]) - 1.5;
+  poly([
+    add(SF, [1.5, -1.2]), add(N, [0, -2.2]), add(SN, [-1.8, -0.8]),
+    add(SN, [-4.2 - w * 1.2, 7.5]), add(SN, [-8.5 - w * 2.6, 19]),
+    hem(0, -22, 18), hem(1, -17.5, 21.2), hem(2, -12, 20), hem(3, -6, 21.5), hem(4, 1, 19.5),
+    [P[0] + 5, P[1] + 3], add(SF, [3, 7]),
+  ], 'cape', 0, 'cape', {
+    n: [-0.25, 0, 1], bevel: 1.2,
+    nf: (x, y) => {
+      const k = clamp((y - capeTop) / 26, 0.12, 1);
+      return [0.85 * Math.sin(x * 0.62 - y * 0.12 + cph * 0.7) * k, 0, 0];
+    },
+  });
+
+  // Hair tail hanging behind the neck.
+  const hs = Math.sin(q.hair) * 0.9 - w * 0.8;
+  cap(T(H, hA, [-5.2, 1.6]), T(H, hA, [-8.2 + hs, 9.5]), 2.3, 0.7, 'hair', 4.6, 'hairback');
+  cap(T(H, hA, [-4.4, 3.6]), T(H, hA, [-6.2 + hs * 0.7, 11.5]), 1.7, 0.5, 'hair', 4.62, 'hairback');
+
+  // Far (shield) arm.
+  const aF = ik(SF, q.handF, 8.6, 8, 1);
+  cap(SF, aF.mid, 2.4, 2.1, 'mail', 1, 'armF');
+  cap(aF.mid, aF.end, 2.2, 2.1, 'steel', 1.1, 'armF');
+  ell(SF, 3.8, 3.4, 0, 'steel', 4.7, 'pauldF');
+
+  // Legs (IK keeps the feet planted while the body moves).
+  const leg = (hip, foot, zb, g) => {
+    const L = ik(hip, foot, 14, 14, -1);
+    cap(hip, L.mid, 3.6, 2.8, 'under', zb, g);
+    cap(L.mid, L.end, 2.7, 2.1, 'leather', zb + 0.2, g);
+    cap(add(L.mid, mul(sub(L.end, L.mid), 0.3)), L.mid, 2.9, 2.6, 'leather', zb + 0.21, g); // boot cuff
+    ell(L.mid, 2.4, 2.2, 0, 'steel', zb + 0.3, g);
+    cap(L.end, add(L.end, [5.6, 2.3]), 2.3, 1.6, 'leather', zb + 0.25, g);
+    return L;
+  };
+  leg(HF, q.footF, 2, 'legF');
+  leg(HN, q.footN, 4, 'legN');
+
+  // Torso: breastplate.
+  poly([
+    [-4.6, -23.2], [3.4, -23.4], [6.4, -20.6], [7.0, -15], [5.2, -7], [5.4, -1],
+    [-5.6, -0.6], [-5.4, -7], [-7.2, -14], [-7.6, -20],
+  ].map((v) => T(P, sp, v)), 'steel', 5, 'torso', {
+    n: [0.2, 0, 1], bevel: 1.8, bevelK: 0.8,
+    nf: (x, y) => { const l = local(x, y); return [((l[0] - 1.4) / 7) * 1.05, ((l[1] + 15) / 12) * 0.35, 0]; },
+  });
+  // Neck + gorget.
+  cap(T(P, sp, [0.6, -21]), T(H, hA, [-0.4, 4.6]), 2.4, 2.3, 'skin', 4.9, 'head');
+  ell(T(P, sp, [0.2, -21.8]), 5.3, 2.5, sp, 'steel', 5.4, 'torso');
+
+  // Tabard with gold trim and sigil.
+  const sway = Math.sin(cph * 0.9) * 0.5 - w * 0.5;
+  const tab = [
+    T(P, sp, [-1.6, -22.2]), T(P, sp, [4.4, -22.4]), T(P, sp, [5.2, -4.2]),
+    [P[0] + 6.4 + sway, P[1] + 10.4], [P[0] + 1.6 + sway, P[1] + 11.4], [P[0] - 3.4 + sway, P[1] + 10.6],
+    T(P, sp, [-3, -4.2]),
+  ];
+  poly(tab, 'cloth', 6, 'tabard', {
+    n: [0.3, 0, 1], bevel: 1.2, edgeW: 1.05, edgeMat: 'trim',
+    nf: (x, y) => {
+      const l = local(x, y);
+      const fold = l[1] > -3 ? 0.45 * Math.sin(l[0] * 1.25 + 0.6 + sway) * clamp((l[1] + 3) / 12, 0, 1) : 0;
+      return [((l[0] - 1.2) / 5) * 0.7 + fold, 0, 0];
+    },
+  });
+  const sg = T(P, sp, [1.5, -13.5]);
+  const star = [];
+  for (let i = 0; i < 8; i++) { const r = i % 2 ? 1.25 : 3.1; const a = (i / 8) * Math.PI * 2 - Math.PI / 2; star.push(add(sg, [Math.cos(a) * r * 0.85, Math.sin(a) * r])); }
+  poly(star, 'sigil', 6.1, 'sigil', { bevel: 0.8, n: [0.25, 0, 1] });
+
+  // Belt + buckle.
+  cap(T(P, sp, [-5.8, -1.4]), T(P, sp, [5.8, -1.8]), 1.6, 1.6, 'leather', 6.5, 'belt', { flat: 0.3 });
+  ell(T(P, sp, [1.8, -1.6]), 1.6, 1.4, 0, 'trim', 6.6, 'belt');
+
+  // Head.
+  ell(H, 5.3, 6.1, hA, 'skin', 8, 'head');
+  cap(T(H, hA, [-1.2, 2.4]), T(H, hA, [3.4, 4.5]), 3.3, 1.6, 'skin', 8.01, 'head');
+  ell(T(H, hA, [5.1, 0.9]), 1.1, 1.4, hA, 'skin', 8.02, 'head');
+  ell(T(H, hA, [-2.1, 1.0]), 1.3, 1.9, hA, 'skin', 8.6, 'ear');
+  const hc = T(H, hA, [-1.2, -2.6]);
+  const hairPts = [
+    [-5.2, 5.8], [-7.0, 2.8], [-7.5, -1.0], [-6.7, -4.7], [-4.6, -7.1], [-1.4, -8.3], [2.1, -7.9], [4.7, -6.3],
+    [6.1, -3.9], [5.4, -1.5], [3.9, -3.0], [3.1, -0.8], [1.9, -2.8], [0.7, -0.9], [-0.5, -2.7],
+    [-2.3, -2.2], [-3.3, -0.4], [-3.4, 2.8], [-4.2, 4.4],
+  ].map((v) => T(H, hA, v));
+  poly(hairPts, 'hair', 8.5, 'hair', {
+    n: [0, 0, 0.35], bevel: 1.1, bevelK: 0.6,
+    nf: (x, y) => {
+      const dx = (x - hc[0]) / 8, dy = (y - hc[1]) / 8;
+      return [dx + 0.18 * Math.sin((y - hc[1]) * 1.9 + (x - hc[0]) * 0.9), dy, Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy))];
+    },
+  });
+
+  // Shield on the far arm.
+  const S = add(q.handF, rot([2.6, 1.2], q.shieldA));
+  const kite = [[-6, -9], [-2, -10.3], [2, -10.3], [6, -9], [6.3, -3], [4.5, 3], [0, 10], [-4.5, 3], [-6.3, -3]];
+  const shPts = kite.map((v) => add(S, rot([v[0] * 0.82, v[1]], q.shieldA)));
+  poly(shPts, 'cloth', 6.8, 'shield', {
+    bevel: 2, bevelK: 0.7, edgeW: 1.25, edgeMat: 'steel',
+    nf: (x, y) => { const l = rot(sub([x, y], S), -q.shieldA); return [l[0] / 6 * 0.75 + 0.35, l[1] / 11 * 0.35 - 0.1, 1]; },
+  });
+  const chev = [[-3.2, -4.5], [0, -1.4], [3.2, -4.5], [3.2, -1.8], [0, 1.6], [-3.2, -1.8]];
+  poly(chev.map((v) => add(S, rot([v[0] * 0.82, v[1] + 0.5], q.shieldA))), 'trim', 6.85, 'shieldSigil', { bevel: 0.9 });
+  ell(add(S, rot([0, 5.2], q.shieldA)), 1.1, 1.1, 0, 'trim', 6.86, 'shieldSigil');
+
+  // Near (sword) arm.
+  const aN = ik(SN, q.handN, 8.6, 8, 1);
+  cap(SN, aN.mid, 2.6, 2.3, 'mail', 9, 'armN');
+  cap(aN.mid, aN.end, 2.4, 2.2, 'steel', 9.3, 'armN');
+  ell(aN.mid, 2.1, 2.1, 0, 'steel', 9.35, 'armN');
+  ell(aN.end, 2.5, 2.3, 0, 'steel', 10, 'handN');
+  // Pauldron (two lames).
+  ell(T(SN, sp, [-0.6, 3.6]), 3.7, 2.5, sp - 0.25, 'steel', 9.45, 'pauldN');
+  ell(T(SN, sp, [-0.3, 0.5]), 4.6, 3.9, sp - 0.2, 'steel', 9.5, 'pauldN');
+
+  // Sword.
+  const d = dirOf(q.swordA), pp = [-d[1], d[0]];
+  const hN = q.handN;
+  const sz = q.swordZ;
+  ell(add(hN, mul(d, -4.3)), 1.4, 1.4, 0, 'trim', 9.8, 'hilt');
+  cap(add(hN, mul(d, -3.5)), add(hN, mul(d, 1.8)), 1.0, 1.0, 'leather', 9.7, 'hilt');
+  cap(add(add(hN, mul(d, 2.6)), mul(pp, 4.2)), add(add(hN, mul(d, 2.6)), mul(pp, -4.2)), 1.05, 1.05, 'trim', 10.2, 'guard');
+  const b0 = add(hN, mul(d, 3.2)), b1 = add(hN, mul(d, 27)), tip = add(hN, mul(d, 30.5));
+  poly([add(b0, mul(pp, 1.45)), add(b1, mul(pp, 1.15)), tip, add(b1, mul(pp, -1.15)), add(b0, mul(pp, -1.45))], 'steel', sz > 5 ? 10.1 : sz, 'blade', {
+    bevel: 0, n: [0.25, -0.35, 1],
+    nf: (x, y) => { const s = (x - hN[0]) * pp[0] + (y - hN[1]) * pp[1]; const k = s > 0 ? 0.55 : -0.55; return [pp[0] * k, pp[1] * k, 0]; },
+  });
+
+  // Face details, pixel-placed relative to the head.
+  const ov = [];
+  const F = (dx, dy, rgb) => { const v = T(H, hA, [dx, dy]); ov.push({ x: v[0] - 0.5, y: v[1] - 0.5, rgb }); };
+  const EYE = [24, 16, 26], IRIS = [58, 92, 150], WHT = [236, 228, 220], BROW = [60, 30, 16], LIP = [150, 76, 62], SH = [168, 96, 70];
+  if (q.blink) { F(1, 1, EYE); F(2, 1, EYE); F(4, 1, EYE); }
+  else {
+    F(1, 0, EYE); F(2, 0, EYE); F(1, 1, EYE); F(2, 1, IRIS); F(3, 1, WHT);
+    F(4, 0, EYE); F(4, 1, IRIS);
+  }
+  F(1, -1, BROW); F(2, -1, BROW); F(4, -1, BROW);
+  F(5, 2, SH);
+  if (q.mouth) { F(3, 4, EYE); F(4, 4, LIP); } else { F(3, 4, LIP); F(4, 4, LIP); }
+  return { parts, overlays: ov, shield: S, head: H, pelvis: P, tip, hand: hN };
+}
+
+function renderKnight(q, opts) {
+  const b = buildKnight(q);
+  const r = renderParts(b.parts, KNIGHT_W, KNIGHT_H, Object.assign({}, opts, { overlays: opts.mode === 'flat' ? null : b.overlays }));
+  if (q.flash) tint(r.rgba, [255, 255, 255], q.flash);
+  return Object.assign(r, { build: b });
+}
+
+function tint(buf, rgb, k) {
+  for (let i = 0; i < buf.length; i += 4) if (buf[i + 3]) {
+    buf[i] = lerp(buf[i], rgb[0], k); buf[i + 1] = lerp(buf[i + 1], rgb[1], k); buf[i + 2] = lerp(buf[i + 2], rgb[2], k);
+  }
+}
+
+
+// ---------- animation ----------
+const TAU = Math.PI * 2;
+const STEP = { swordZ: 1, blink: 1, mouth: 1 };
+function mix(a, b, u) {
+  const o = {};
+  for (const k in a) {
+    const va = a[k], vb = b[k] == null ? va : b[k];
+    if (STEP[k] || typeof va !== 'number' && !Array.isArray(va)) o[k] = u < 1 ? va : vb;
+    else if (Array.isArray(va)) o[k] = [lerp(va[0], vb[0], u), lerp(va[1], vb[1], u)];
+    else o[k] = lerp(va, vb, u);
+  }
+  return o;
+}
+function track(base, keys) {
+  let prev = Object.assign({}, base);
+  return keys.map((k) => (prev = Object.assign({}, prev, k)));
+}
+function sampleTrack(F, t) {
+  if (t <= F[0].t) return F[0];
+  for (let i = 0; i < F.length - 1; i++) if (t < F[i + 1].t) {
+    const u = (t - F[i].t) / (F[i + 1].t - F[i].t);
+    return mix(F[i], F[i + 1], F[i + 1].lin ? u : smooth(u));
+  }
+  return F[F.length - 1];
+}
+
+function idleLayer(q, g) {
+  const ph = ((g % 1.6) / 1.6) * TAU, b = 0.5 - 0.5 * Math.cos(ph);
+  return Object.assign(q, {
+    py: q.py + b * 0.9,
+    handN: [q.handN[0], q.handN[1] + b * 0.8],
+    handF: [q.handF[0], q.handF[1] + b * 0.6],
+    swordA: q.swordA + 0.025 * Math.sin(ph),
+    cape: g * 2.2, wind: q.wind + 0.3 * Math.sin(g * 1.3), hair: g * 3,
+    blink: q.blink || ((g % 3.7) < 0.13 ? 1 : 0),
+  });
+}
+
+const R = READY;
+const ATTACK = track(R, [
+  { t: 0 },
+  { t: 0.1, py: 59.5, spine: 0.18, handN: [42, 52], swordA: -0.25, handF: [57, 48] },
+  { t: 0.34, ox: 58, py: 58, spine: 0.32, handN: [40, 52], swordA: 0.2, handF: [58, 47], wind: 1.6 },
+  { t: 0.46, ox: 62, py: 55, spine: -0.12, neck: -0.08, handN: [39, 24], swordA: -2.55, swordZ: 0.8, handF: [60, 42], footF: [58, 84], mouth: 1 },
+  { t: 0.54, ox: 64, py: 60.5, spine: 0.36, neck: 0.1, handN: [61, 53], swordA: 0.6, swordZ: 9.8, handF: [53, 49], footF: [61, 84], wind: 1.2 },
+  { t: 0.78, ox: 64, py: 60, spine: 0.3, handN: [60, 54], swordA: 0.66, mouth: 0 },
+  { t: 0.92, ox: 58, py: 57, spine: 0.08, neck: 0, handN: [47, 51], swordA: -0.6, footF: [55, 84] },
+  { t: 1.18, ox: 0, handN: R.handN, swordA: R.swordA, handF: R.handF, spine: R.spine, wind: 0.2, lin: 1 },
+  { t: 1.4, wind: R.wind },
+]);
+const HURT = track(R, [
+  { t: 0 },
+  { t: 0.07, ox: -5, py: 58.5, spine: -0.26, neck: -0.22, handN: [42, 53], swordA: -0.55, handF: [55, 44], shieldA: -0.25, mouth: 1, blink: 1 },
+  { t: 0.34, ox: -4, py: 58, spine: -0.18, neck: -0.12 },
+  { t: 0.7, ox: 0, py: R.py, spine: R.spine, neck: 0, handN: R.handN, swordA: R.swordA, handF: R.handF, shieldA: R.shieldA, mouth: 0, blink: 0 },
+]);
+const VICTORY = track(R, [
+  { t: 0 },
+  { t: 0.12, py: 58.5, spine: 0.12, handN: [44, 50], swordA: -1.3 },
+  { t: 0.36, py: 55.5, spine: -0.06, neck: -0.14, handN: [36, 15], swordA: -1.6, handF: [56, 48], shieldA: -0.1, footN: [36, 84], footF: [53, 84], wind: 1.4 },
+  { t: 2.4, wind: 0.8 },
+]);
+
+const ANIMS = {
+  ready:   { dur: Infinity, fps: 8, pose: (t, g) => idleLayer(Object.assign({}, R), g) },
+  attack:  { dur: 1.4, fps: 16, pose: (t, g) => {
+    const q = sampleTrack(ATTACK, t);
+    if (t > 0.1 && t < 0.34) { // run cycle
+      const u = (t - 0.1) / 0.24, f = u * TAU * 1.5;
+      q.footN = [R.footN[0] + 7 * Math.sin(f), R.footN[1] - 3.5 * Math.max(0, Math.cos(f))];
+      q.footF = [R.footF[0] - 7 * Math.sin(f), R.footF[1] - 3.5 * Math.max(0, -Math.cos(f))];
+      q.py += -1.2 * Math.abs(Math.sin(f));
+    }
+    if (t > 0.92 && t < 1.18) q.py -= 7 * Math.sin(Math.PI * (t - 0.92) / 0.26);
+    return Object.assign(q, { cape: g * 2.2, hair: g * 3 });
+  } },
+  hurt:    { dur: 0.8, fps: 16, pose: (t, g) => Object.assign(sampleTrack(HURT, t), { flash: t < 0.09 ? 0.7 : t < 0.16 ? 0.3 : 0, cape: g * 2.2, hair: g * 3 }) },
+  victory: { dur: 2.6, fps: 12, pose: (t, g) => {
+    const q = sampleTrack(VICTORY, t);
+    if (t > 0.36) { const b = 0.5 - 0.5 * Math.cos((t - 0.36) * 4); q.py += b * 0.8; q.handN = [q.handN[0], q.handN[1] + b * 0.8]; }
+    return Object.assign(q, { cape: g * 3, hair: g * 3.4 });
+  } },
+};
+
+// ---------- training dummy ----------
+const DUMMY_W = 48, DUMMY_H = 80, DUMMY_BASE = [24, 76];
+function renderDummy(wobble, flash, opts) {
+  const B = DUMMY_BASE;
+  const P = (x, y) => T(B, wobble, [x - B[0], y - B[1]]);
+  const parts = [
+    { type: 'cap', a: P(24, 77), b: P(24, 24), ra: 1.8, rb: 1.6, mat: 'wood', z: 1, g: 'post' },
+    { type: 'cap', a: P(11, 37), b: P(37, 36), ra: 1.4, rb: 1.4, mat: 'wood', z: 2, g: 'bar' },
+    { type: 'ell', c: P(24, 47), rx: 8.5, ry: 12.5, rot: wobble, mat: 'straw', z: 3, g: 'body' },
+    { type: 'ell', c: P(24.5, 26), rx: 6.4, ry: 6.8, rot: wobble, mat: 'straw', z: 3.5, g: 'headd' },
+    { type: 'ell', c: P(10, 37), rx: 2.6, ry: 2.2, rot: 0, mat: 'straw', z: 2.5, g: 'tuft' },
+    { type: 'ell', c: P(38, 36), rx: 2.6, ry: 2.2, rot: 0, mat: 'straw', z: 2.5, g: 'tuft' },
+    { type: 'cap', a: P(16.2, 41), b: P(31.8, 40.5), ra: 1, rb: 1, mat: 'rope', z: 4, g: 'rope' },
+    { type: 'cap', a: P(16.4, 55), b: P(31.6, 55.5), ra: 1, rb: 1, mat: 'rope', z: 4, g: 'rope' },
+    { type: 'cap', a: P(19.5, 31.5), b: P(29.5, 31.2), ra: 0.9, rb: 0.9, mat: 'rope', z: 4, g: 'rope' },
+    { type: 'ell', c: P(25, 48), rx: 4.4, ry: 4.6, rot: 0, mat: 'paint', z: 3.6, g: 'target' },
+    { type: 'ell', c: P(25, 48), rx: 2.6, ry: 2.8, rot: 0, mat: 'sigil', z: 3.7, g: 'target2' },
+    { type: 'ell', c: P(25, 48), rx: 1.2, ry: 1.3, rot: 0, mat: 'paint', z: 3.8, g: 'target3' },
+  ];
+  const X = [30, 22, 18];
+  const ov = [];
+  const eye = (cx, cy) => { for (const [dx, dy] of [[-1, -1], [1, 1], [0, 0], [1, -1], [-1, 1]]) { const v = P(cx + dx + 0.5, cy + dy + 0.5); ov.push({ x: v[0] - 0.5, y: v[1] - 0.5, rgb: X }); } };
+  eye(23, 25); eye(28, 25);
+  const r = renderParts(parts, DUMMY_W, DUMMY_H, Object.assign({}, opts, { faction: 'azure', overlays: ov }));
+  if (flash) tint(r.rgba, [255, 255, 255], flash);
+  return r;
+}
+
+// ---------- battlefield ----------
+const SCENE_W = 224, SCENE_H = 126, GROUND_Y = 112;
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function hash2(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = smooth(x - xi), yf = smooth(y - yi);
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  return lerp(lerp(a, b, xf), lerp(c, d, xf), yf);
+}
+function fbm(x, y) { return vnoise(x, y) * 0.55 + vnoise(x * 2.1, y * 2.1) * 0.3 + vnoise(x * 4.3, y * 4.3) * 0.15; }
+const SKY = (() => {
+  const k = ['#1a2448', '#243463', '#30477c', '#3f5d93', '#5577a8', '#7394b9', '#97b1c7', '#bccbd2'].map(hexRGB), out = [];
+  for (let i = 0; i < 15; i++) { const v = (i / 14) * 7, a = Math.floor(v), b = Math.min(7, a + 1), t = v - a; out.push([0, 1, 2].map((j) => Math.round(lerp(k[a][j], k[b][j], t)))); }
+  return out;
+})();
+const GRASS = ['#1f3522', '#29452a', '#335532', '#3f663a', '#4d7743', '#5d884c', '#6f9855', '#86a862'].map(hexRGB);
+
+function renderBattlefield() {
+  const W = SCENE_W, H = SCENE_H, out = new Uint8ClampedArray(W * H * 4);
+  const put = (x, y, c) => { const k = (y * W + x) * 4; out[k] = c[0]; out[k + 1] = c[1]; out[k + 2] = c[2]; out[k + 3] = 255; };
+  const HOR = 66;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const bay = BAYER[(y & 3) * 4 + (x & 3)];
+    if (y < HOR) {
+      let t = Math.pow(y / HOR, 1.25) * (SKY.length - 1);
+      const cl = fbm(x * 0.035 + 3, y * 0.09) - (1 - y / HOR) * 0.12;
+      if (cl > 0.52) t += (cl - 0.52) * 9;
+      let c = SKY[clamp(Math.floor(t + bay - 0.5), 0, SKY.length - 1)];
+      const rg = 1 - Math.abs(vnoise(x * 0.045, 3.3) * 2 - 1), rg2 = 1 - Math.abs(vnoise(x * 0.11, 8.1) * 2 - 1);
+      const mtn = 54 - rg * rg * 16 - rg2 * 4 - fbm(x * 0.02, 1.7) * 6;
+      const hill = 57 + fbm(x * 0.05 + 9, 4.2) * 7;
+      const trees = 62 + fbm(x * 0.35 + 20, 2) * 3.2;
+      if (y > mtn) {
+        const k = (y - mtn) / 12, lit = vnoise(x * 0.3, y * 0.15) > 0.5 && k < 0.8;
+        c = hexRGB(k + bay * 0.2 < 0.3 ? (lit ? '#90a4bf' : '#7a8fae') : k + bay * 0.3 < 0.8 ? '#6a7f9f' : '#5d7292');
+        if (mtn < 43 && y - mtn < (44 - mtn) * 0.45 + bay) c = hexRGB(lit || bay > 0.6 ? '#dfe7ef' : '#b3c2d4');
+      }
+      if (y > hill) c = hexRGB((y - hill) + bay * 2 < 2 ? '#577a73' : '#4a6a66');
+      if (y > trees) c = hexRGB(fbm(x * 0.5, y * 0.5) + bay * 0.2 > 0.62 ? '#35553f' : '#27432f');
+      put(x, y, c);
+    } else {
+      const depth = (y - HOR) / (H - HOR);
+      const z = 40 / (y - HOR + 4);
+      const stripe = Math.floor(z * 3 + x * 0.004 * (1 - depth)) % 2 ? 0.35 : 0;
+      const n = fbm(x * (0.18 - depth * 0.08), y * 0.45) * 2.2;
+      let t = 6.6 - depth * 4.2 + stripe + n - 1.1;
+      // worn arena patch where the units stand
+      const ax = (x - 112) / 104, ay = (y - 113) / 11;
+      const worn = 1 - (ax * ax + ay * ay);
+      let c = GRASS[clamp(Math.floor(t + bay - 0.5), 0, GRASS.length - 1)];
+      if (worn > 0 && worn * 1.6 + fbm(x * 0.3, y * 0.6) - 0.55 > bay) c = hexRGB(t + bay > 4.3 ? '#8a7d55' : t + bay > 3.2 ? '#766a47' : '#62583b');
+      put(x, y, c);
+    }
+  }
+  const rnd = mulberry(7);
+  for (let i = 0; i < 520; i++) { // grass blades and flowers
+    const y = HOR + 2 + Math.floor(Math.pow(rnd(), 0.8) * (H - HOR - 2)), x = Math.floor(rnd() * W);
+    const depth = (y - HOR) / (H - HOR), hgt = depth > 0.55 ? 2 : 1;
+    if (rnd() < 0.04 && depth < 0.7) { put(x, y, hexRGB(rnd() < 0.5 ? '#efe7c8' : '#e6c24e')); continue; }
+    for (let j = 0; j < hgt; j++) if (y - j >= HOR) put(x, y - j, GRASS[clamp(Math.round(6 - depth * 3 + (rnd() < 0.5 ? 1 : -1)), 0, 7)]);
+  }
+  return out;
+}
+
+// ---------- tiny bitmap font for damage numbers ----------
+const DIGITS = [
+  '.###.#...##..###.#.###..##...#.###.', '..#...##....#....#....#....#...###.', '.###.#...#....#...#...#...#...#####',
+  '####.....#....#.###.....#....#####.', '...#...##..#.#.#..#.#####...#....#.', '######....####.....#....##...#.###.',
+  '..##..#...#....####.#...##...#.###.', '#####....#...#...#...#....#....#...', '.###.#...##...#.###.#...##...#.###.',
+  '.###.#...##...#.####....#...#..##..',
+];
+function drawNumber(buf, W, H, str, cx, cy, fill, edge) {
+  const cw = 6, x0 = Math.round(cx - (str.length * cw - 1) / 2), y0 = Math.round(cy);
+  const on = (x, y) => {
+    const i = Math.floor((x - x0) / cw), gx = (x - x0) - i * cw, gy = y - y0;
+    if (i < 0 || i >= str.length || gx > 4 || gy < 0 || gy > 6) return false;
+    return DIGITS[+str[i]][gy * 5 + gx] === '#';
+  };
+  for (let y = y0 - 1; y <= y0 + 7; y++) for (let x = x0 - 1; x <= x0 + str.length * cw; x++) {
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    const k = (y * W + x) * 4;
+    if (on(x, y)) { const c = y - y0 < 3 ? fill[0] : fill[1]; buf[k] = c[0]; buf[k + 1] = c[1]; buf[k + 2] = c[2]; }
+    else if (on(x + 1, y) || on(x - 1, y) || on(x, y + 1) || on(x, y - 1) || on(x + 1, y + 1)) { buf[k] = edge[0]; buf[k + 1] = edge[1]; buf[k + 2] = edge[2]; }
+  }
+}
+
+function blit(dst, DW, DH, src, SWd, SHd, ox, oy) {
+  ox = Math.round(ox); oy = Math.round(oy);
+  for (let y = 0; y < SHd; y++) {
+    const dy = y + oy; if (dy < 0 || dy >= DH) continue;
+    for (let x = 0; x < SWd; x++) {
+      const dx = x + ox; if (dx < 0 || dx >= DW) continue;
+      const s = (y * SWd + x) * 4; if (!src[s + 3]) continue;
+      const d = (dy * DW + dx) * 4; dst[d] = src[s]; dst[d + 1] = src[s + 1]; dst[d + 2] = src[s + 2]; dst[d + 3] = 255;
+    }
+  }
+}
+function shadow(buf, W, cx, cy, rx, ry, k) {
+  for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+    const u = (x + 0.5 - cx) / rx, v = (y + 0.5 - cy) / ry; if (u * u + v * v > 1 || x < 0 || x >= W) continue;
+    const i = (y * W + x) * 4; buf[i] *= k; buf[i + 1] *= k; buf[i + 2] *= k * 1.05;
+  }
+}
+function fillPoly(buf, W, H, pts, rgb, alphaTest) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const q of pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+  for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(H - 1, y1); y++) for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(W - 1, x1); x++) {
+    if (!samplePoly({ pts, bevel: 0 }, x + 0.5, y + 0.5)) continue;
+    if (alphaTest && !alphaTest(x, y)) continue;
+    const k = (y * W + x) * 4; buf[k] = rgb[0]; buf[k + 1] = rgb[1]; buf[k + 2] = rgb[2];
+  }
+}
+
+
+</script>
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const sctx = stage.getContext('2d');
+  const frameImg = sctx.createImageData(SCENE_W, SCENE_H);
+  const BG = renderBattlefield();
+  const KX = 14;                 // knight frame's left edge in the scene
+  const DX = 164;                // dummy's base x
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const st = {
+    faction: 'azure', anim: 'ready', t0: 0, auto: !reduce, nextAuto: 1.0,
+    knight: { hp: 342, max: 342 }, dummy: { hp: 800, max: 800, wob: 0, vel: 0, flash: 0 },
+    floaters: [], sparks: [], hitDone: false,
+    totals: { dmg: 0, hits: 0, crits: 0, broken: 0 },
+  };
+  const now = () => performance.now() / 1000;
+
+  // ----- UI wiring -----
+  const $ = (id) => document.getElementById(id);
+  const play = (name) => { st.anim = name; st.t0 = now(); st.hitDone = false; syncButtons(); };
+  $('b-attack').onclick = () => play('attack');
+  $('b-hurt').onclick = () => play('hurt');
+  $('b-victory').onclick = () => play('victory');
+  $('b-auto').onclick = () => { st.auto = !st.auto; st.nextAuto = now() + 0.4; syncButtons(); };
+  for (const f of ['azure', 'crimson', 'onyx']) $('f-' + f).onclick = () => { st.faction = f; syncButtons(); drawStatic(); };
+  function syncButtons() {
+    $('b-auto').setAttribute('aria-pressed', String(st.auto));
+    for (const a of ['attack', 'hurt', 'victory']) $('b-' + a).setAttribute('aria-pressed', String(st.anim === a));
+    for (const f of ['azure', 'crimson', 'onyx']) $('f-' + f).setAttribute('aria-pressed', String(st.faction === f));
+  }
+  function syncStatus() {
+    const k = st.knight, d = st.dummy;
+    $('khp').textContent = `HP ${k.hp} / ${k.max}`;
+    $('dhp').textContent = `HP ${d.hp} / ${d.max}`;
+    $('kbar').firstElementChild.style.width = (100 * k.hp / k.max) + '%';
+    $('dbar').firstElementChild.style.width = (100 * d.hp / d.max) + '%';
+    $('kbar').classList.toggle('low', k.hp / k.max < 0.3);
+    $('dbar').classList.toggle('low', d.hp / d.max < 0.3);
+    const fmt = (n) => n.toLocaleString('en-US');
+    $('t-dmg').textContent = fmt(st.totals.dmg); $('t-hits').textContent = fmt(st.totals.hits);
+    $('t-crits').textContent = fmt(st.totals.crits); $('t-broken').textContent = fmt(st.totals.broken);
+  }
+
+  // ----- battle events -----
+  function strike(g) {
+    const crit = Math.random() < 0.14;
+    const dmg = Math.round((96 + Math.random() * 38) * (crit ? 1.6 : 1));
+    const d = st.dummy;
+    d.hp = Math.max(0, d.hp - dmg); d.vel += crit ? 4.2 : 3; d.flash = 1;
+    st.totals.dmg += dmg; st.totals.hits++; if (crit) st.totals.crits++;
+    st.floaters.push({ text: String(dmg), x: DX + 1, y: 30, t0: g, kind: crit ? 'crit' : 'hit' });
+    st.sparks.push({ x: DX, y: 72, t0: g, big: crit });
+    syncStatus();
+  }
+  function takeHit(g) {
+    const dmg = 18 + Math.floor(Math.random() * 14);
+    st.knight.hp = Math.max(1, st.knight.hp - dmg);
+    st.floaters.push({ text: String(dmg), x: KX + 48, y: 22, t0: g, kind: 'hurt' });
+    st.sparks.push({ x: KX + 64, y: 70, t0: g, big: false });
+    syncStatus();
+  }
+
+  function update(g, dt) {
+    const A = ANIMS[st.anim];
+    const t = g - st.t0;
+    if (st.anim === 'attack' && !st.hitDone && t >= 0.5) { st.hitDone = true; strike(g); }
+    if (st.anim === 'hurt' && !st.hitDone && t >= 0.02) { st.hitDone = true; takeHit(g); }
+    if (t >= A.dur) {
+      const broke = st.anim === 'attack' && st.dummy.hp <= 0;
+      if (broke) { st.totals.broken++; play('victory'); }
+      else {
+        if (st.anim === 'victory' && st.dummy.hp <= 0) { st.dummy.hp = st.dummy.max; syncStatus(); }
+        play('ready'); st.nextAuto = g + 0.9;
+      }
+    }
+    if (st.auto && st.anim === 'ready' && g >= st.nextAuto) play('attack');
+    // regenerate a little while idle
+    if (st.anim === 'ready' && st.knight.hp < st.knight.max && Math.random() < dt * 3) { st.knight.hp++; syncStatus(); }
+    // dummy wobble spring
+    const d = st.dummy;
+    d.vel += (-38 * d.wob - 4.5 * d.vel) * dt; d.wob += d.vel * dt;
+    d.flash = Math.max(0, d.flash - dt * 7);
+    st.floaters = st.floaters.filter((f) => g - f.t0 < 1.0);
+    st.sparks = st.sparks.filter((s) => g - s.t0 < 0.22);
+  }
+
+  // ----- drawing -----
+  const FILL = {
+    hit: [[255, 250, 226], [246, 206, 96]],
+    crit: [[255, 236, 160], [255, 140, 44]],
+    hurt: [[255, 214, 206], [232, 76, 64]],
+  };
+  function stepped(name, g) {
+    const A = ANIMS[name], t = g - st.t0;
+    const fps = A.fps;
+    return { t: Math.floor(t * fps) / fps, g: Math.floor(g * fps) / fps };
+  }
+  function knightPose(g) {
+    const s = stepped(st.anim, g);
+    return ANIMS[st.anim].pose(Math.max(0, s.t), s.g);
+  }
+
+  function drawSmear(buf, g) {
+    if (st.anim !== 'attack') return;
+    const s = stepped('attack', g), t = s.t;
+    if (t < 0.46 || t > 0.64) return;
+    const fade = t > 0.56 ? 1 - (t - 0.56) / 0.08 : 1;
+    const tEnd = Math.min(t, 0.56), tStart = Math.max(0.455, tEnd - 0.1);
+    const pts = [];
+    for (let u = tStart; u <= tEnd + 1e-6; u += 0.006) {
+      const q = ANIMS.attack.pose(u, s.g), d = dirOf(q.swordA);
+      const o = [KX + q.ox, 112 - 88];
+      pts.push({ age: (tEnd - u) / 0.1, mid: add(add(o, q.handN), mul(d, 12)), tip: add(add(o, q.handN), mul(d, 32)) });
+    }
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const alpha = (1 - a.age) * fade;
+      const col = a.age < 0.3 ? [255, 255, 255] : a.age < 0.65 ? [196, 226, 255] : [120, 168, 230];
+      fillPoly(buf, SCENE_W, SCENE_H, [a.mid, a.tip, b.tip, b.mid], col, (x, y) => alpha > BAYER[(y & 3) * 4 + (x & 3)]);
+    }
+  }
+  function drawSparks(buf, g) {
+    for (const s of st.sparks) {
+      const u = (g - s.t0) / 0.22, len = (s.big ? 13 : 9) * (0.4 + u), r0 = len * u * 0.7;
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + 0.3, l = i % 2 ? len * 0.6 : len;
+        for (let r = r0; r < l; r += 0.5) {
+          const x = Math.round(s.x + Math.cos(a) * r), y = Math.round(s.y + Math.sin(a) * r);
+          if (x < 0 || y < 0 || x >= SCENE_W || y >= SCENE_H) continue;
+          const k = (y * SCENE_W + x) * 4, c = r < l * 0.6 ? [255, 255, 240] : [255, 206, 90];
+          buf[k] = c[0]; buf[k + 1] = c[1]; buf[k + 2] = c[2];
+        }
+      }
+    }
+  }
+
+  function drawScene(g) {
+    const buf = frameImg.data;
+    buf.set(BG);
+    const q = knightPose(g);
+    const kx = KX + q.ox;
+    shadow(buf, SCENE_W, kx + q.px + 3, 112.5, 16 - (57 - q.py) * 0.8, 3.2, 0.62);
+    shadow(buf, SCENE_W, DX, 112.5, 9, 2.6, 0.62);
+    const d = st.dummy;
+    const dum = renderDummy(Math.round(d.wob * 25) / 25, d.flash > 0.5 ? 0.75 : d.flash > 0.15 ? 0.3 : 0, { mode: 'pixel' });
+    blit(buf, SCENE_W, SCENE_H, dum.rgba, DUMMY_W, DUMMY_H, DX - 24, 112 - 76);
+    const kn = renderKnight(q, { mode: 'pixel', faction: st.faction });
+    blit(buf, SCENE_W, SCENE_H, kn.rgba, KNIGHT_W, KNIGHT_H, kx, 112 - 88);
+    drawSmear(buf, g);
+    drawSparks(buf, g);
+    for (const f of st.floaters) {
+      const u = g - f.t0; if (u > 0.8 && Math.floor(u * 20) % 2) continue;
+      const rise = Math.min(1, u / 0.35);
+      drawNumber(buf, SCENE_W, SCENE_H, f.text, f.x, f.y - 10 * (1 - Math.pow(1 - rise, 3)), FILL[f.kind], [30, 14, 10]);
+    }
+    sctx.putImageData(frameImg, 0, 0);
+  }
+
+  // Small live previews at real size.
+  const small = ['s1', 's2'].map((id) => $(id).getContext('2d'));
+  const smallImg = small[0].createImageData(KNIGHT_W, KNIGHT_H);
+  function drawSmall(g) {
+    const s = { t: 0, g: Math.floor(g * 8) / 8 };
+    const r = renderKnight(ANIMS.ready.pose(s.t, s.g), { mode: 'pixel', faction: st.faction });
+    smallImg.data.set(r.rgba);
+    for (const c of small) c.putImageData(smallImg, 0, 0);
+  }
+
+  // Static panels: pipeline, attack strip, stats.
+  const STRIP = [
+    [0, 'Ready'], [0.1, 'Crouch'], [0.22, 'Dash'], [0.34, 'Arrive'], [0.46, 'Wind-up'],
+    [0.5, 'Swing'], [0.54, 'Impact'], [0.78, 'Follow-through'], [1.05, 'Hop back'],
+  ];
+  const stripRow = $('strip');
+  for (const [t, label] of STRIP) {
+    const fig = document.createElement('figure');
+    fig.innerHTML = `<canvas class="px tile" width="96" height="96"></canvas><figcaption><b>${label}</b>${Math.round(t * 1000)} ms</figcaption>`;
+    stripRow.appendChild(fig);
+  }
+  function put(canvas, rgba) { const c = canvas.getContext('2d'), im = c.createImageData(canvas.width, canvas.height); im.data.set(rgba); c.putImageData(im, 0, 0); }
+  function drawStatic() {
+    const pose = ANIMS.ready.pose(0, 0.5);
+    const flat = renderKnight(pose, { mode: 'flat', faction: st.faction });
+    put($('p-flat'), flat.rgba);
+    put($('p-lit'), renderKnight(pose, { mode: 'lit', faction: st.faction }).rgba);
+    const px = renderKnight(pose, { mode: 'pixel', faction: st.faction });
+    put($('p-px'), px.rgba);
+    const canv = stripRow.querySelectorAll('canvas');
+    STRIP.forEach(([t], i) => put(canv[i], renderKnight(ANIMS.attack.pose(t, 1), { mode: 'pixel', faction: st.faction }).rgba));
+    // stats from the final frame
+    const cols = new Map(); let top = 96, bottom = 0;
+    for (let i = 0; i < px.rgba.length; i += 4) {
+      if (!px.rgba[i + 3]) continue;
+      const y = Math.floor(i / 4 / KNIGHT_W); top = Math.min(top, y); bottom = Math.max(bottom, y);
+      const key = (px.rgba[i] << 16) | (px.rgba[i + 1] << 8) | px.rgba[i + 2];
+      cols.set(key, (cols.get(key) || 0) + 1);
+    }
+    const n = flat.build.parts.length;
+    $('p-count').textContent = `${n} simple shapes`;
+    $('sp-parts').textContent = String(n);
+    $('sp-cols').textContent = String(cols.size);
+    $('sp-h').textContent = `${bottom - top + 1} px`;
+    const lum = (k) => ((k >> 16) & 255) * 0.3 + ((k >> 8) & 255) * 0.59 + (k & 255) * 0.11;
+    const hue = (k) => { const r = (k >> 16) & 255, g = (k >> 8) & 255, b = k & 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx - mn < 18) return -1; let h = mx === r ? (g - b) / (mx - mn) : mx === g ? 2 + (b - r) / (mx - mn) : 4 + (r - g) / (mx - mn); return (h * 60 + 360) % 360; };
+    const sorted = [...cols.keys()].sort((a, b) => (Math.round(hue(a) / 30) - Math.round(hue(b) / 30)) || lum(a) - lum(b));
+    $('palette').innerHTML = sorted.map((k) => `<i style="background:#${k.toString(16).padStart(6, '0')}"></i>`).join('');
+  }
+
+  let last = now();
+  function frame() {
+    const g = now(), dt = Math.min(0.05, g - last); last = g;
+    update(g, dt);
+    drawScene(g);
+    drawSmall(g);
+    requestAnimationFrame(frame);
+  }
+  syncButtons(); syncStatus(); drawStatic();
+  st.t0 = now(); st.nextAuto = now() + 1.2;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
