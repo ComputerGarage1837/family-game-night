@@ -1,0 +1,777 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}</style></head><body><title>Naiad Battle</title>
+<!-- Monster-battle prototype: Naiad (004) redrawn as vector art from the concept sheet, fighting a wild Naiad
+     in a lagoon ray-traced at load. Everything is drawn in code, no image files. Open in any browser. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --sea: #0b1b30;
+    --sea-2: #10284a;
+    --panel: #f7fbff;
+    --panel-ink: #1d2a44;
+    --panel-edge: #2c3d63;
+    --muted: #9fb3d4;
+    --text: #eaf2ff;
+    --water: #3b8ee8;
+    --normal: #9aa0a8;
+    --hp-hi: #3fd46a;
+    --hp-mid: #f2c230;
+    --hp-lo: #ef4a3c;
+    --exp: #4fb3ff;
+    --accent: #5ee6d2;
+    --ui: "Nunito", "Trebuchet MS", system-ui, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  body { background: radial-gradient(110% 70% at 50% 0%, #17365f 0%, var(--sea) 62%) fixed, var(--sea); color: var(--text); font: 600 16px/1.5 var(--ui); }
+  .wrap { max-width: 960px; margin: 0 auto; padding-inline: 16px; padding-block: 22px 48px; display: grid; gap: 14px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+  h1 { margin: 0; font: 900 clamp(28px, 5vw, 40px)/1 var(--ui); letter-spacing: .01em; }
+  h1 span { color: var(--accent); }
+  .sub { margin: 0; color: var(--muted); font-weight: 700; font-size: 14px; }
+
+  .stage { position: relative; border-radius: 14px; overflow: hidden; border: 2px solid #2b4a78; box-shadow: 0 16px 40px rgba(0, 0, 0, .45); background: #5aa9d6; }
+  .stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 20, 40, .55); color: #fff; font-weight: 800; letter-spacing: .04em; }
+
+  /* battle info boxes, drawn over the scene */
+  .info { position: absolute; background: var(--panel); color: var(--panel-ink); border: 2px solid var(--panel-edge); border-radius: 10px 4px 10px 4px; padding: 5px 10px 7px; width: min(40%, 250px); box-shadow: 0 3px 0 rgba(20, 30, 60, .35); font-size: clamp(11px, 1.9vw, 15px); line-height: 1.2; }
+  .info.foe { top: 5%; left: 3%; }
+  .info.me { bottom: 5%; right: 3%; }
+  .info .row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-weight: 900; }
+  .info .lv { font-weight: 800; font-size: .85em; }
+  .hp { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+  .hp b { font-size: .7em; font-weight: 900; color: #e7a21b; background: #2c3d63; color: #ffd257; padding: 0 4px; border-radius: 3px; }
+  .bar { flex: 1; height: .55em; min-height: 6px; background: #3a465e; border-radius: 4px; overflow: hidden; border: 1px solid #1d2a44; }
+  .bar i { display: block; height: 100%; width: 100%; background: var(--hp-hi); transition: width .5s ease-out, background-color .3s; }
+  .bar i.mid { background: var(--hp-mid); } .bar i.lo { background: var(--hp-lo); }
+  .hpnum { text-align: right; font-weight: 900; font-size: .85em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .exp { height: 4px; background: #c9d6ea; border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .exp i { display: block; height: 100%; width: 30%; background: var(--exp); transition: width .9s ease-out; }
+  .stat { display: inline-block; font-size: .72em; font-weight: 900; padding: 0 5px; border-radius: 3px; margin-left: 4px; color: #fff; }
+  .stat.up { background: #3b8ee8; } .stat.down { background: #ef4a3c; }
+
+  /* message + commands */
+  .console { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 10px; }
+  .msg { background: var(--panel); color: var(--panel-ink); border: 2px solid var(--panel-edge); border-radius: 12px; padding: 12px 16px; min-height: 92px; font-weight: 800; font-size: clamp(15px, 2.2vw, 19px); line-height: 1.35; }
+  .moves { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .move { font: 800 15px/1.1 var(--ui); color: var(--panel-ink); background: var(--panel); border: 2px solid var(--panel-edge); border-left: 8px solid var(--c, var(--normal)); border-radius: 10px; padding: 9px 10px; text-align: left; cursor: pointer; display: grid; gap: 3px; }
+  .move small { font-weight: 800; font-size: 11px; color: #5b6b8a; display: flex; justify-content: space-between; }
+  .move:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 0 rgba(20, 30, 60, .3); }
+  .move:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .move:disabled { opacity: .55; cursor: default; }
+  .move.water { --c: var(--water); } .move.normal { --c: var(--normal); }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; color: var(--muted); font-size: 13px; }
+  .tools button { font: 800 13px/1 var(--ui); color: var(--text); background: #1a3358; border: 1px solid #36598c; border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+  .tools button[aria-pressed="true"] { background: #245b8f; border-color: var(--accent); }
+  .tools button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .note { margin: 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+  .note b { color: var(--text); }
+  @media (max-width: 640px) {
+    .console { grid-template-columns: 1fr; }
+    .msg { min-height: 70px; }
+    .info { padding: 3px 7px 5px; }
+    .info .exp { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bar i, .exp i { transition: none; } }
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Naiad <span>vs</span> Naiad</h1>
+    <p class="sub">Battle prototype · everything on this page is drawn in code</p>
+  </header>
+
+  <section class="stage" aria-label="Battle">
+    <canvas id="stage" width="1280" height="720" role="img" aria-label="Your Naiad, a pale-blue sea dragon with a teal frill and ribbon tail, faces a wild Naiad across a turquoise lagoon from two sandy platforms"></canvas>
+    <div class="info foe" aria-live="polite">
+      <div class="row"><span>Naiad ♀</span><span class="lv">Lv<span id="f-lv">7</span><span id="f-stat"></span></span></div>
+      <div class="hp"><b>HP</b><div class="bar"><i id="f-bar"></i></div></div>
+    </div>
+    <div class="info me">
+      <div class="row"><span>Naiad ♂</span><span class="lv">Lv<span id="p-lv">8</span><span id="p-stat"></span></span></div>
+      <div class="hp"><b>HP</b><div class="bar"><i id="p-bar"></i></div></div>
+      <div class="hpnum" id="p-hp">34 / 34</div>
+      <div class="exp"><i id="p-exp"></i></div>
+    </div>
+    <div class="veil" id="veil">Filling the lagoon…</div>
+  </section>
+
+  <div class="console">
+    <div class="msg" id="msg" aria-live="polite">A wild Naiad appeared!</div>
+    <div class="moves" id="moves" role="group" aria-label="Moves"></div>
+  </div>
+  <div class="tools">
+    <button id="b-auto" type="button" aria-pressed="false">Auto battle</button>
+    <button id="b-reset" type="button">New battle</button>
+    <span id="loading"></span>
+  </div>
+  <p class="note"><b>Next up:</b> co-op. The arena, turn order and info boxes are built so a second trainer's monster can stand beside yours for 2-vs-2 battles. Nerite and Nereid can follow as evolutions of this same drawing.</p>
+</main>
+
+<script type="text/plain" id="s3src">
+'use strict';
+/* Lagoon battle arena, ray-traced once: two sandy platforms in shallow turquoise water, rocks,
+   distant islands and cliffs, sky with clouds. Water reflects the sky and the sun. */
+const S3 = (() => {
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const sm = (t) => t * t * (3 - 2 * t);
+  const sstep = (a, b, x) => sm(clamp((x - a) / (b - a), 0, 1));
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const hex = (h) => { const n = parseInt(h.slice(1), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
+  function h3(x, y, z) { let h = (x * 374761393 + y * 668265263 + z * 1440662683) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  function n3(x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), xf = sm(x - xi), yf = sm(y - yi), zf = sm(z - zi);
+    const c = (a, b, d) => h3(xi + a, yi + b, zi + d);
+    return lerp(lerp(lerp(c(0, 0, 0), c(1, 0, 0), xf), lerp(c(0, 1, 0), c(1, 1, 0), xf), yf), lerp(lerp(c(0, 0, 1), c(1, 0, 1), xf), lerp(c(0, 1, 1), c(1, 1, 1), xf), yf), zf);
+  }
+  const fbm = (x, z) => n3(x, 0.5, z) * 0.5 + n3(x * 2.03, 1.5, z * 2.03) * 0.28 + n3(x * 4.1, 2.5, z * 4.1) * 0.14 + n3(x * 8.3, 3.5, z * 8.3) * 0.08;
+
+  const SUN = nrm([-0.5, 0.62, -0.6]);
+  const SUNC = [1.25, 1.12, 0.95], SKYC = [0.42, 0.56, 0.78];
+  const PLAT = [
+    { c: [-2.1, -0.62, 2.4], r: [2.35, 0.9, 1.55] },  // player's platform, near
+    { c: [3.3, -0.62, -3.9], r: [2.2, 0.85, 1.45] },  // opponent's platform, far
+  ];
+  const rocks = [
+    { c: [-5.2, 0.0, 1.0], r: [0.6, 0.38, 0.5] }, { c: [-4.6, -0.05, 1.7], r: [0.32, 0.22, 0.3] },
+{ c: [6.1, 0.05, -3.6], r: [0.62, 0.42, 0.55] },
+    { c: [5.5, -0.04, -2.9], r: [0.3, 0.2, 0.28] }, { c: [0.6, -0.02, -5.2], r: [0.42, 0.26, 0.38] },
+    { c: [-3.8, 0.05, -9.2], r: [1.5, 0.8, 1.0] }, { c: [-2.4, 0.0, -9.8], r: [0.8, 0.45, 0.7] },
+    { c: [8.4, 0.1, 0.4], r: [1.1, 0.7, 0.9] },  ];
+
+  function hitEll(ro, rd, c, r) {
+    const o = [(ro[0] - c[0]) / r[0], (ro[1] - c[1]) / r[1], (ro[2] - c[2]) / r[2]], d = [rd[0] / r[0], rd[1] / r[1], rd[2] / r[2]];
+    const a = dot(d, d), b = dot(o, d), cc = dot(o, o) - 1, disc = b * b - a * cc;
+    if (disc < 0) return -1; const s = Math.sqrt(disc); let t = (-b - s) / a; if (t < 1e-3) t = (-b + s) / a; return t > 1e-3 ? t : -1;
+  }
+  function trace(ro, rd, any) {
+    let bt = 1e9, obj = null, kind = '';
+    for (const p of PLAT) { const t = hitEll(ro, rd, p.c, p.r); if (t > 0 && t < bt) { bt = t; obj = p; kind = 'plat'; if (any) return true; } }
+    for (const p of rocks) { const t = hitEll(ro, rd, p.c, p.r); if (t > 0 && t < bt) { bt = t; obj = p; kind = 'rock'; if (any) return true; } }
+    if (any) return false;
+    if (rd[1] < 0) { const t = -ro[1] / rd[1]; if (t < bt) { bt = t; obj = null; kind = 'water'; } }
+    return kind ? { t: bt, obj, kind } : null;
+  }
+
+  function sky(rd) {
+    const e = clamp(rd[1], -0.2, 1);
+    let c = mixc(hex('#cfe6f3'), hex('#4f8fd6'), Math.pow(clamp(e * 2.2, 0, 1), 0.6));
+    // clouds
+    if (rd[1] > 0.01) {
+      const u = rd[0] / rd[1] * 0.35, v = rd[2] / rd[1] * 0.35, cl = fbm(u + 3, v);
+      c = mixc(c, hex('#ffffff'), clamp((cl - 0.5) * 3.2, 0, 1) * clamp(rd[1] * 6, 0, 1) * 0.85);
+    }
+    const sd = Math.max(0, dot(rd, SUN));
+    c = add(c, mul([1, 0.95, 0.8], Math.pow(sd, 400) * 2 + Math.pow(sd, 12) * 0.12));
+    // distant islands and cliffs on the horizon
+    const az = Math.atan2(rd[0], -rd[2]);
+    const hill = 0.012 + 0.05 * Math.pow(Math.max(0, 1 - Math.abs(n3(az * 3, 0.3, 0.3) * 2 - 1)), 3) * (az < -0.2 ? 1 : 0.35) + 0.01 * n3(az * 25, 1.7, 0.4);
+    if (rd[1] >= 0 && rd[1] < hill) c = mixc(hex('#5f8a7c'), hex('#b9d3dc'), 0.5 + 0.3 * (1 - rd[1] / hill));
+    return c;
+  }
+
+  function platShade(p, n, o) {
+    const top = n[1];
+    const q = [(p[0] - o.c[0]) / o.r[0], (p[2] - o.c[2]) / o.r[2]], rr = Math.hypot(q[0], q[1]);
+    let base = mixc(hex('#e8d6a6'), hex('#f3e6c2'), fbm(p[0] * 2, p[2] * 2));
+    base = mixc(base, hex('#c9b48a'), clamp((rr - 0.78) * 4, 0, 1));      // darker rim
+    if (p[1] < 0.06) base = mixc(base, hex('#9c8a64'), 0.7);               // wet band at the waterline
+    const ring = Math.abs(rr - 0.62) < 0.018 ? 0.12 : 0;                   // a faint arena ring drawn in the sand
+    base = mixc(base, hex('#b09a70'), ring);
+    const pebble = h3(Math.floor(p[0] * 9), 2, Math.floor(p[2] * 9)) > 0.985 ? 0.25 : 0;
+    base = mixc(base, hex('#8a8478'), pebble);
+    return { base, n: nrm([n[0] + (fbm(p[0] * 6, p[2] * 6) - 0.5) * 0.2, n[1], n[2] + (fbm(p[2] * 6, p[0] * 6) - 0.5) * 0.2]), spec: 0 };
+  }
+
+  function shadeHit(ro, rd, h, depth) {
+    const p = add(ro, mul(rd, h.t));
+    if (h.kind === 'water') {
+      // shallows near platforms and rocks turn turquoise
+      let shallow = 0;
+      for (const o of PLAT.concat(rocks)) { const d = Math.hypot((p[0] - o.c[0]) / (o.r[0] * 1.9), (p[2] - o.c[2]) / (o.r[2] * 1.9)); shallow = Math.max(shallow, clamp(1.35 - d, 0, 1)); }
+      const w = [(n3(p[0] * 2.2, 0.3, p[2] * 3.4) - 0.5) * 0.14 + (n3(p[0] * 7, 5.3, p[2] * 9) - 0.5) * 0.06, 1, (n3(p[2] * 2.6, 9.3, p[0] * 3.1) - 0.5) * 0.14];
+      const n = nrm(w);
+      const refl = sub(rd, mul(n, 2 * dot(rd, n)));
+      const fres = 0.08 + 0.92 * Math.pow(1 - clamp(-dot(rd, n), 0, 1), 5);
+      let body = mixc(hex('#135a8a'), hex('#1f8fa8'), clamp(1 - h.t / 40, 0, 1));
+      body = mixc(body, hex('#56d6c8'), shallow * 0.85);
+      let rc = depth < 1 ? (trace(add(p, [0, 0.01, 0]), refl, true) ? hex('#4a6a5a') : sky(refl)) : sky(refl);
+      let c = mixc(body, rc, fres);
+      // foam ring hugging the platforms and rocks
+      let foam = 0;
+      for (const o of PLAT.concat(rocks)) {
+        const d = Math.hypot((p[0] - o.c[0]) / o.r[0], (p[2] - o.c[2]) / o.r[2]);
+        const edge = Math.sqrt(Math.max(0, 1 - Math.pow(-o.c[1] / o.r[1], 2)));
+        foam = Math.max(foam, sstep(0.16, 0.0, Math.abs(d - edge) - 0.02) * (0.5 + 0.5 * n3(p[0] * 8, 1, p[2] * 8)));
+      }
+      c = mixc(c, [0.95, 0.98, 1], foam * 0.85);
+      const sp = Math.pow(Math.max(0, dot(refl, SUN)), 180);
+      c = add(c, mul([1, 0.96, 0.85], sp * 1.4));
+      const fog = clamp((h.t - 12) / 40, 0, 1);
+      return mixc(c, hex('#bcd6e2'), fog * 0.6);
+    }
+    let n, base, spec = 0;
+    if (h.kind === 'plat') { n = nrm([(p[0] - h.obj.c[0]) / h.obj.r[0] ** 2, (p[1] - h.obj.c[1]) / h.obj.r[1] ** 2, (p[2] - h.obj.c[2]) / h.obj.r[2] ** 2]); const s = platShade(p, n, h.obj); base = s.base; n = s.n; }
+    else {
+      const o = h.obj;
+      n = nrm([(p[0] - o.c[0]) / o.r[0] ** 2, (p[1] - o.c[1]) / o.r[1] ** 2, (p[2] - o.c[2]) / o.r[2] ** 2]);
+      n = nrm(add(n, [(n3(p[0] * 6, p[1] * 6, p[2] * 6) - 0.5) * 1.8 + (n3(p[0] * 16, p[1] * 16, p[2] * 16) - 0.5) * 0.6, (n3(p[1] * 7, p[0] * 7, p[2] * 7) - 0.5) * 0.8, (n3(p[2] * 6, p[1] * 6, p[0] * 6) - 0.5) * 1.8]));
+      base = mixc(hex('#7b8088'), hex('#a9aca6'), n3(p[0] * 4, p[1] * 4, p[2] * 4));
+      if (p[1] < 0.1) base = mixc(base, hex('#4c5a4a'), 0.6);
+      base = mixc(base, hex('#7fa860'), clamp((n[1] - 0.45) * 2.5, 0, 1) * 0.65);
+      spec = 0.03;
+    }
+    const ndl = dot(n, SUN);
+    const sh = ndl > 0 && !trace(add(p, mul(n, 0.01)), SUN, true) ? 1 : 0;
+    const skyl = 0.55 + 0.45 * n[1];
+    const c = [0, 1, 2].map((i) => base[i] * (SUNC[i] * Math.max(0, ndl) * sh * 0.95 + SKYC[i] * skyl * 0.8 + 0.05) + spec * sh);
+    const fog = clamp((h.t - 12) / 40, 0, 1);
+    return mixc(c, hex('#bcd6e2'), fog * 0.6);
+  }
+
+  function camera(W, H, pos, target, vfovDeg) {
+    const fwd = nrm(sub(target, pos)), right = nrm(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
+    const f = (H / 2) / Math.tan((vfovDeg * Math.PI) / 360);
+    return {
+      W, H, pos,
+      ray(px, py) { return nrm(add(add(mul(right, px - W / 2), mul(up, H / 2 - py)), mul(fwd, f))); },
+      project(p) { const d = sub(p, pos), z = dot(d, fwd); return { x: W / 2 + (dot(d, right) * f) / z, y: H / 2 - (dot(d, up) * f) / z, depth: z, scale: f / z }; },
+    };
+  }
+  function render(cam, ss, onRow) {
+    const { W, H } = cam, out = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let acc = [0, 0, 0];
+        for (let sy = 0; sy < ss; sy++) for (let sx = 0; sx < ss; sx++) {
+          const rd = cam.ray(x + (sx + 0.5) / ss, y + (sy + 0.5) / ss);
+          const h = trace(cam.pos, rd, false);
+          acc = add(acc, h ? shadeHit(cam.pos, rd, h, 0) : sky(rd));
+        }
+        const k = (y * W + x) * 4;
+        for (let i = 0; i < 3; i++) out[k + i] = clamp(Math.pow(acc[i] / (ss * ss), 1 / 1.1) * 255, 0, 255);
+        out[k + 3] = 255;
+      }
+      if (onRow) onRow(y);
+    }
+    return out;
+  }
+  const platTop = (i) => [PLAT[i].c[0], PLAT[i].c[1] + PLAT[i].r[1] * Math.sqrt(1 - 0), PLAT[i].c[2]];
+  return { camera, render, platTop, PLAT };
+})();
+
+</script>
+<script>
+'use strict';
+/* Naiad (004), redrawn as vector art traced from the concept sheet. Coordinates are the concept's own
+   pixels (the character spans roughly x 12-316, y 26-356). Each part is a smooth closed curve with
+   anime cel shading (a shadow crescent away from the light, a soft highlight), ink line art,
+   white swirl markings and translucent teal fins. Parts hang on pivots so the pose can animate. */
+const Naiad = (() => {
+  // ---------- curves ----------
+  // Closed or open Catmull-Rom spline through points, added to the current path.
+  function spline(ctx, pts, closed, tension = 0.5) {
+    const n = pts.length; if (n < 2) return;
+    const P = (i) => pts[closed ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    const last = closed ? n : n - 1;
+    for (let i = 0; i < last; i++) {
+      const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2), k = tension / 3;
+      ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) * k, p1[1] + (p2[1] - p0[1]) * k, p2[0] - (p3[0] - p1[0]) * k, p2[1] - (p3[1] - p1[1]) * k, p2[0], p2[1]);
+    }
+    if (closed) ctx.closePath();
+  }
+  const pathOf = (pts, closed = true, tension) => { const p = new Path2D(); spline(p, pts, closed, tension); return p; };
+
+  // ---------- palette (sampled from the concept) ----------
+  const C = {
+    ink: 'rgba(52,60,84,0.92)', inkSoft: 'rgba(52,64,94,0.45)',
+    skin: '#97b8ef', skinShade: '#7291df', skinDeep: '#5b77bd', skinLight: '#dbeafd', face: '#cfe2fa',
+    belly: '#6a82b8',
+    teal: 'rgba(52,236,210,0.5)', tealSolid: '#3fd3c3', tealShade: '#1fae9f', tealLight: 'rgba(170,255,240,0.75)', tealInk: '#2a8f86',
+    horn: '#e4e9f0', hornShade: '#a9b3c4',
+    knob: '#eef2f7', knobShade: '#b7c0d0',
+    white: 'rgba(240,248,255,0.95)',
+    iris: '#e0287a', irisDark: '#8c0b3e',
+  };
+  let LWK = 1;
+  const LIGHT = [0.9, -0.8]; // light from the upper right, like the concept
+
+  // A cel-shaded body part: base fill, a shadow crescent away from the light, a soft highlight toward it.
+  function part(ctx, path, o) {
+    const s = o.shade == null ? 5 : o.shade;
+    ctx.save();
+    ctx.clip(path);
+    ctx.fillStyle = o.dark || C.skinShade; ctx.fill(path);
+    ctx.save(); ctx.translate(LIGHT[0] * s * 0.9, LIGHT[1] * s * 0.9); ctx.fillStyle = o.base || C.skin; ctx.fill(path); ctx.restore();
+    if (o.grad !== false && o.center) { // soft painted falloff toward the lower right
+      const c = o.center, r = o.gradR || 60, g = ctx.createLinearGradient(c[0] - r * 0.7, c[1] + r * 0.7, c[0] + r * 0.7, c[1] - r * 0.7);
+      g.addColorStop(0, 'rgba(50,80,175,0.28)'); g.addColorStop(0.5, 'rgba(235,245,255,0)'); g.addColorStop(1, 'rgba(235,245,255,0.38)');
+      ctx.fillStyle = g; ctx.fill(path);
+    }
+    if (o.light !== false) {
+      const c = o.center || [0, 0], k = o.hiScale || 0.72;
+      ctx.save(); ctx.translate(c[0] + LIGHT[0] * s * 2.2, c[1] + LIGHT[1] * s * 2.2); ctx.scale(k, k); ctx.translate(-c[0], -c[1]);
+      ctx.globalAlpha = o.hiAlpha == null ? 0.55 : o.hiAlpha; ctx.fillStyle = o.lightCol || C.skinLight; ctx.fill(path); ctx.restore();
+    }
+    if (o.paint) o.paint(ctx);
+    ctx.restore();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (o.stroke === false) return;
+    ctx.strokeStyle = o.ink || C.ink; ctx.lineWidth = (o.lw || 1.15) * LWK; ctx.stroke(o.outline || path);
+  }
+  function fin(ctx, path, o = {}) {
+    ctx.save(); ctx.fillStyle = o.fill || C.teal; ctx.fill(path);
+    ctx.clip(path);
+    ctx.save(); ctx.translate(LIGHT[0] * 5, LIGHT[1] * 5); ctx.globalAlpha = 0.45; ctx.fillStyle = C.tealLight; ctx.fill(path); ctx.restore();
+    if (o.streaks) { ctx.strokeStyle = 'rgba(200,255,248,0.55)'; ctx.lineWidth = 1.2; for (const s of o.streaks) { ctx.beginPath(); spline(ctx, s, false); ctx.stroke(); } }
+    ctx.restore();
+    ctx.strokeStyle = o.ink || C.tealInk; ctx.lineWidth = (o.lw || 1.1) * LWK; ctx.stroke(path);
+  }
+  function strokeLine(ctx, pts, col, w) { ctx.beginPath(); spline(ctx, pts, false); ctx.strokeStyle = col; ctx.lineWidth = w * Math.max(1, LWK * 0.8); ctx.lineCap = 'round'; ctx.stroke(); }
+  // A small spiral curl (for markings and knobs).
+  function curl(ctx, cx, cy, r, turns, rot, col, w, dir = 1) {
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const t = i / 40, a = rot + dir * t * turns * Math.PI * 2, rr = r * (1 - t * 0.85);
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.stroke();
+  }
+  function knob(ctx, cx, cy, r, rot) {
+    const p = new Path2D(); p.arc(cx, cy, r, 0, Math.PI * 2);
+    part(ctx, p, { base: C.knob, dark: C.knobShade, lightCol: '#ffffff', shade: r * 0.35, center: [cx, cy], hiScale: 0.6, hiAlpha: 0.8, lw: 1.3 });
+    curl(ctx, cx + r * 0.1, cy + r * 0.05, r * 0.72, 1.3, rot, 'rgba(120,132,160,0.9)', 1.2);
+  }
+
+  // ---------- geometry helpers for posing ----------
+  const rotAbout = (pts, c, a) => { const cs = Math.cos(a), sn = Math.sin(a); return pts.map(([x, y]) => [c[0] + (x - c[0]) * cs - (y - c[1]) * sn, c[1] + (x - c[0]) * sn + (y - c[1]) * cs]); };
+  const shift = (pts, dx, dy) => pts.map(([x, y]) => [x + dx, y + dy]);
+  // Wave points along x (for the tail and ribbon), growing with distance from an anchor x.
+  const wave = (pts, x0, amp, ph, freq = 0.035) => pts.map(([x, y]) => { const k = Math.max(0, x - x0) / 180; return [x, y + Math.sin(x * freq - ph) * amp * k]; });
+
+  // ---------- the drawing ----------
+  /* pose: { t: seconds, breathe, headTilt, tailPh, flap, mouth, blink } */
+  function draw(ctx, pose = {}) {
+    const t = pose.t || 0;
+    LWK = pose.lineScale || 1;
+    const br = pose.breathe == null ? Math.sin(t * 2.2) : pose.breathe;       // -1..1
+    const head = (pose.headTilt || 0) + Math.sin(t * 1.1) * 0.025;
+    const tph = pose.tailPh == null ? t * 2.4 : pose.tailPh;
+    const flap = (pose.flap || 0) + Math.sin(t * 2.2 + 0.6) * 0.04;
+    const HEADPIV = [178, 104], NECK_BASE = [140, 190];
+    const bob = br * 1.2;
+    const H = (pts) => rotAbout(shift(pts, 0, bob), HEADPIV, head);
+
+    // far upper flipper (big, pointing back-left), hinged at its knob
+    const UF = rotAbout([[98, 150], [86.7, 153.3], [66.7, 160], [46.7, 170], [30, 181.7], [18.3, 194], [30, 198.3], [56.7, 198.8], [80, 196.7], [100, 192], [110, 178], [108, 160]], [102, 158], -flap * 1.4);
+    part(ctx, pathOf(UF), { center: [60, 180], shade: 4, paint: (g) => {
+      curl(g, 78, 170, 7, 1.2, 0.5, C.white, 1.4, -1); strokeLine(g, [[60, 176], [70, 172], [80, 174]], C.white, 1.2);
+      strokeLine(g, [[26, 193], [60, 192], [92, 186]], 'rgba(60,85,160,0.35)', 2);
+    } });
+    // far lower flipper (down and back-left)
+    const LF = rotAbout([[82, 222], [66.7, 236.7], [46.7, 243.3], [36.7, 250], [23.3, 276.7], [15, 310], [15, 336.7], [26.7, 330], [43.3, 310], [60, 296.7], [71.7, 280], [80, 262]], [80, 240], flap * 0.8);
+    part(ctx, pathOf(LF), { center: [40, 285], shade: 4, paint: (g) => { curl(g, 44, 252, 5.5, 1.1, 0.8, C.white, 1.3, -1); strokeLine(g, [[18, 330], [40, 300], [64, 272]], 'rgba(60,85,160,0.3)', 2.5); } });
+    // near rear flipper (pointing down, under the body)
+    const RF = [[113, 290], [120, 313], [125, 333], [128, 355], [137, 353], [145, 337], [153, 313], [157, 294]];
+    part(ctx, pathOf(RF), { center: [135, 320], shade: 4 });
+    // hanging front flipper on the right (behind the tail)
+    const HF = shift([[227, 212], [243, 217], [253, 243], [260, 273], [263, 290], [255, 288], [247, 263], [233, 237], [224, 224]], 0, bob * 0.4);
+    part(ctx, pathOf(HF), { center: [248, 255], shade: 3 });
+
+    // frill: a fan of curved teal spikes from behind the head, plus the throat fin
+    const leaf = (root, tip, bend, w) => { // a curved, pointed spike from root to tip
+      const mx = (root[0] + tip[0]) / 2, my = (root[1] + tip[1]) / 2, dx = tip[0] - root[0], dy = tip[1] - root[1], L = Math.hypot(dx, dy);
+      const nx = -dy / L, ny = dx / L;
+      return [[root[0] + nx * w, root[1] + ny * w], [mx + nx * (w * 0.7 + bend), my + ny * (w * 0.7 + bend)], tip, [mx - nx * (w * 0.5 - bend), my - ny * (w * 0.5 - bend)], [root[0] - nx * w, root[1] - ny * w]];
+    };
+    const SPIKES = [[[168, 54], [132, 28], 5, 6], [[166, 62], [116, 42], 5, 6.5], [[165, 71], [116, 62], 3, 6.5], [[165, 80], [122, 82], -1, 6], [[166, 88], [130, 100], -4, 5.2], [[170, 94], [148, 110], -3, 4]];
+    // webbing between the spikes
+    fin(ctx, pathOf(H([[170, 50], [134, 32], [150, 48], [118, 44], [146, 60], [120, 64], [148, 74], [126, 82], [150, 86], [134, 98], [158, 96], [150, 106], [174, 96]]), true, 0.3), { fill: 'rgba(110,232,214,0.7)', lw: 0.8, ink: 'rgba(42,143,134,0.6)' });
+    for (const [r, t, b, w] of SPIKES) fin(ctx, pathOf(H(leaf(r, t, b, w)), true, 0.35), { fill: 'rgba(58,214,196,0.93)', lw: 1.0, streaks: [H([[r[0] - 4, r[1]], [(r[0] + t[0]) / 2, (r[1] + t[1]) / 2 + b * 0.4]])] });
+    const TF = H([[168, 90], [161.7, 109.3], [172, 100], [176.7, 98.3], [183, 106.7], [186, 96]]);
+    fin(ctx, pathOf(TF, true, 0.2), { fill: 'rgba(63,211,195,0.95)' });
+    // horns (behind the head)
+    const HB = H([[160, 50], [150, 38], [139, 22], [147, 27], [160, 38], [172, 46]]);
+    part(ctx, pathOf(HB, true, 0.35), { base: C.horn, dark: C.hornShade, lightCol: '#fff', shade: 1.2, center: H([[156, 37]])[0], lw: 0.9, ink: 'rgba(90,100,125,0.85)' });
+
+    // body + neck, one smooth shape
+    const neckFront = [[188.3, 100], [190, 120], [196.7, 140], [201.7, 160], [200.7, 176.7], [195, 186.7], [184, 196]];
+    const BODY = [[142.7, 96.7], [166, 92], ...neckFront.map(([x, y]) => [x, y]),
+      [172, 212], [166.7, 226], [162, 248], [156, 268], [150, 288], [125, 296], [98, 288], [83, 268], [78, 244], [82, 214], [93.3, 196.7], [103.3, 186.7], [116.7, 176.7], [130, 170], [140, 160], [145, 146.7], [141.7, 120]];
+    const bodyB = BODY.map(([x, y]) => [x, y < 110 ? y + bob : y + bob * Math.max(0, (250 - y) / 150)]);
+    part(ctx, pathOf(bodyB), { center: [150, 170], gradR: 90, shade: 6, hiScale: 0.8, paint: (g) => {
+      // dark underside between the front limb and the rear flipper
+      g.fillStyle = C.belly; g.fill(pathOf([[176, 210], [152, 216], [138, 240], [140, 268], [152, 276], [160, 252], [166, 230]]));
+      // deeper blue along the back of the neck
+      g.fillStyle = 'rgba(80,110,200,0.28)'; g.fill(pathOf([[143, 98], [150, 100], [150, 150], [136, 170], [130, 166], [141, 146]]));
+      // white swirl markings: a vine down the neck and waves across the flank
+      const W = C.white;
+      strokeLine(g, [[152, 108], [149, 122], [153, 136], [148, 150], [150, 164]], W, 1.3);
+      curl(g, 155, 116, 3.2, 1.2, 0, W, 1.2); curl(g, 147, 130, 3, 1.2, 3, W, 1.2, -1); curl(g, 154, 144, 3.4, 1.2, 0.5, W, 1.2); curl(g, 146, 158, 3, 1.2, 3, W, 1.2, -1);
+      // a fan of waves spreading from the base of the neck down the flank, ending in curls
+      const fan = [[[138, 170], [124, 180], [112, 192], [104, 206], [100, 214]], [[140, 176], [130, 188], [120, 200], [114, 214], [112, 222]],
+        [[143, 180], [136, 194], [129, 207], [125, 219], [124, 226]], [[146, 184], [142, 198], [138, 212], [136, 224]], [[150, 186], [150, 200], [148, 214], [148, 224]]];
+      fan.forEach((ln, i) => { strokeLine(g, ln, W, 1.5); const e = ln[ln.length - 1]; curl(g, e[0] + 2, e[1] + 1, 3.2, 1.1, 2.5, W, 1.4, i % 2 ? 1 : -1); });
+      curl(g, 116, 196, 5, 1.2, 0.3, W, 1.4, -1); curl(g, 104, 188, 4, 1.2, 1.2, W, 1.3);
+      strokeLine(g, [[146, 178], [156, 188], [168, 196], [178, 205]], W, 1.2);
+    } });
+
+    // near front arm with its knob
+    const ARM = shift([[174, 204], [196, 203], [218, 205], [230, 210], [222, 224], [205, 226], [186, 224], [172, 220]], 0, bob * 0.5);
+    part(ctx, pathOf(ARM), { center: [200, 214], shade: 3.5 });
+    knob(ctx, 229, 216.7 + bob * 0.5, 11.5, 0.3);
+    knob(ctx, 101, 156, 12.5, 2.2);
+
+    // tail band wrapping in front of the body
+    let TU = [[82, 250], [100, 263], [123, 268], [150, 270], [173, 268], [200, 258], [227, 253], [253, 252], [273, 257], [288, 267]];
+    let TL = [[267, 262], [240, 262], [213, 270], [187, 282], [160, 292], [133, 296], [107, 293], [90, 283], [82, 267]];
+    TU = wave(TU, 110, 5, tph); TL = wave(TL, 110, 5, tph);
+    part(ctx, pathOf(TU.concat(TL), true, 0.45), { center: [180, 272], shade: 3.5, hiScale: 0.85, paint: (g) => {
+      strokeLine(g, wave([[95, 280], [140, 284], [190, 272], [240, 259], [275, 260]], 110, 5, tph), 'rgba(190,215,250,0.75)', 3);
+    } });
+    // translucent ribbon fin along the tail
+    let RU = [[83, 247], [133, 250], [173, 243], [207, 232], [233, 227], [267, 226], [290, 233], [307, 253], [315, 280], [305, 308]];
+    let RL = [[300, 290], [283, 280], [260, 282], [233, 290], [200, 307], [173, 315], [150, 318], [120, 313], [100, 300], [87, 280]];
+    RU = wave(RU, 110, 7, tph - 0.5); RL = wave(RL, 110, 7, tph - 0.5);
+    fin(ctx, pathOf(RU.concat(RL), true, 0.45), { streaks: [wave([[120, 300], [180, 300], [240, 280], [295, 262]], 110, 7, tph - 0.5), wave([[150, 260], [210, 250], [270, 240]], 110, 7, tph - 0.5)] });
+
+    ctx.strokeStyle = 'rgba(52,60,84,0.55)'; ctx.lineWidth = 1.1 * LWK; ctx.stroke(pathOf(TU, false, 0.45)); ctx.stroke(pathOf(TL, false, 0.45));
+    // head
+    const HEADF = [[166.7, 47.5], [183.3, 45.5], [199, 45.5], [209, 49], [217, 52.5], [230, 57], [240, 63.3], [244.6, 71.7], [241.7, 80], [237.3, 86.7], [228.3, 90.7], [210, 91.7], [197, 94.5], [189, 99]];
+    const HEAD = H(HEADF.concat([[176, 104], [160, 96], [158, 78], [160, 58]]));
+    part(ctx, pathOf(HEAD, true, 0.5), { outline: pathOf(H(HEADF), false, 0.5), base: C.face, dark: '#9dbbee', lightCol: '#eef6ff', center: H([[205, 70]])[0], gradR: 40, shade: 4, hiScale: 0.75, paint: (g) => {
+      g.fillStyle = 'rgba(70,95,170,0.55)'; g.fill(pathOf(H([[186, 92], [200, 92], [194, 100], [182, 106], [176, 100]])));
+      curl(g, ...H([[183, 72]])[0], 7.5, 1.35, 0.2, C.white, 1.8); strokeLine(g, H([[172, 82], [182, 84], [193, 81], [198, 76]]), C.white, 1.5); curl(g, ...H([[196, 76]])[0], 2.5, 1, 3, C.white, 1.3, -1);
+      strokeLine(g, H([[176, 64], [184, 62], [190, 66]]), C.white, 1.2);
+    } });
+    for (const [r, t, b, w] of [[[174, 50], [150, 38], 2, 3.2], [[173, 58], [148, 52], 1, 3]]) fin(ctx, pathOf(H(leaf(r, t, b, w)), true, 0.35), { fill: 'rgba(120,236,220,0.9)', lw: 0.9 });
+    // small front horn
+    part(ctx, pathOf(H([[181, 48], [191, 37], [196, 34], [193, 41], [188, 48]]), true, 0.3), { base: C.horn, dark: C.hornShade, lightCol: '#fff', shade: 1, center: H([[189, 42]])[0], lw: 1.1 });
+    // face details
+    const mouthOpen = pose.mouth || 0;
+    strokeLine(ctx, H([[239, 82], [226, 86 + mouthOpen * 3], [210, 87], [204, 88]]), C.ink, 1.3);
+    strokeLine(ctx, H([[233, 70], [236, 72.5]]), C.ink, 1.2);                       // nostril
+    strokeLine(ctx, H([[198, 63], [207, 60.5], [218, 64]]), C.inkSoft, 1.2);        // brow
+    // eye
+    const [ex, ey] = H([[207, 70]])[0];
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(head); ctx.scale(1.3, 1.3);
+    if (pose.blink) { strokeLine(ctx, [[-6, 0], [0, 1.6], [6, 0]], C.ink, 1.6); }
+    else {
+      const eye = new Path2D(); spline(eye, [[-6.5, 0.5], [-2, -3.6], [4.5, -3.2], [6.5, 0], [3, 3.2], [-3, 3.2]], true, 0.5);
+      ctx.fillStyle = '#fbf6fa'; ctx.fill(eye);
+      ctx.save(); ctx.clip(eye);
+      const g = ctx.createRadialGradient(0.5, -0.5, 0.5, 0.5, 0, 4.6); g.addColorStop(0, '#ff7ab4'); g.addColorStop(0.55, C.iris); g.addColorStop(1, C.irisDark);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0.8, 0, 3.8, 4.1, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a0618'; ctx.beginPath(); ctx.ellipse(1.1, 0.2, 1.5, 2.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-0.6, -1.4, 1.1, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 1.4 * Math.min(LWK, 1.6); ctx.stroke(eye);
+      strokeLine(ctx, [[-6.5, 0.2], [-2, -3.8], [4.5, -3.5], [7.2, -0.6]], C.ink, 2.2);  // heavier upper lid
+    }
+    ctx.restore();
+  }
+
+  const BOUNDS = { x: 8, y: 20, w: 314, h: 342 };  // concept-space box that holds the whole character
+  return { draw, BOUNDS };
+})();
+
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const LW = 640, LH = 360;                       // logical scene size
+  const canvas = $('stage'), ctx = canvas.getContext('2d');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const CAM = { pos: [-0.4, 2.7, 9.0], target: [0.9, 0.25, -1.4], fov: 38 };
+  const s3text = $('s3src').textContent;
+  const S3 = new Function(s3text + '\nreturn S3;')();
+  const cam = S3.camera(LW, LH, CAM.pos, CAM.target, CAM.fov);
+
+  // ----- crisp canvas at the device's resolution -----
+  function fit() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = canvas.clientWidth || LW;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(w * dpr * 9 / 16);
+  }
+  fit(); window.addEventListener('resize', fit);
+
+  // ----- pre-rendered lagoon (ray-traced in a worker) -----
+  const bg = document.createElement('canvas'); bg.width = LW; bg.height = LH;
+  let bgReady = false;
+  function bgDone(buf) { bg.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), LW, LH), 0, 0); bgReady = true; $('veil').hidden = true; }
+  try {
+    const glue = `\nonmessage = (e) => { const d = e.data; const cam = S3.camera(d.W, d.H, d.pos, d.target, d.fov);
+      const out = S3.render(cam, d.ss, (y) => { if (y % 18 === 17) postMessage({ p: (y + 1) / d.H }); });
+      postMessage({ buf: out.buffer }, [out.buffer]); };`;
+    const wk = new Worker(URL.createObjectURL(new Blob([s3text + glue], { type: 'text/javascript' })));
+    wk.onmessage = (e) => { if (e.data.buf) bgDone(e.data.buf); else $('veil').textContent = `Filling the lagoon… ${Math.round(e.data.p * 100)}%`; };
+    wk.onerror = () => fallback();
+    wk.postMessage({ W: LW, H: LH, pos: CAM.pos, target: CAM.target, fov: CAM.fov, ss: 2 });
+  } catch (e) { fallback(); }
+  function fallback() { setTimeout(() => bgDone(S3.render(cam, 1).buffer), 30); }
+
+  // ----- where the monsters stand -----
+  const ANCHOR = [150, 300];                      // concept-space point that sits on the platform
+  const plat = [0, 1].map((i) => cam.project(S3.platTop(i)));
+  const SPOT = {
+    me: { x: plat[0].x + 6, y: plat[0].y + 16, s: 0.46, flip: false },
+    foe: { x: plat[1].x + 2, y: plat[1].y + 7, s: 0.3, flip: true },
+  };
+
+  // ----- battle data -----
+  const MOVES = [
+    { id: 'nip', name: 'Tide Nip', type: 'normal', power: 40, pp: 35, kind: 'phys', text: 'A quick lunging bite.' },
+    { id: 'bubble', name: 'Bubble Jet', type: 'water', power: 45, pp: 25, kind: 'spec', text: 'A stream of bubbles.' },
+    { id: 'mist', name: 'Mist Veil', type: 'water', power: 0, pp: 20, kind: 'buff', text: 'Raises Defense.' },
+    { id: 'tail', name: 'Tail Swipe', type: 'normal', power: 0, pp: 30, kind: 'debuff', text: "Lowers the foe's Attack." },
+  ];
+  const mkMon = (lv, hp) => ({ lv, hp, max: hp, atk: 11 + lv, def: 10 + lv, spa: 13 + lv, spd: 11 + lv, spe: 12 + lv, st: { atk: 0, def: 0 }, pp: MOVES.map((m) => m.pp) });
+  let me, foe, exp = 0.3;
+  const stage = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
+
+  // visual state per side
+  const V = { me: { dx: 0, dy: 0, flash: 0, hide: false, alpha: 1, sink: 0, mouth: 0, spin: 0, blink: 0 }, foe: { dx: 0, dy: 0, flash: 0, hide: false, alpha: 1, sink: 0, mouth: 0, spin: 0, blink: 0 } };
+  const fx = [];                                  // active effects
+  let busy = false, auto = false;
+
+  // ----- tiny timeline helpers -----
+  const sleep = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 120) : ms));
+  function tween(ms, fn) {
+    return new Promise((res) => {
+      const t0 = performance.now();
+      const step = () => { const u = Math.min(1, (performance.now() - t0) / (reduce ? Math.min(ms, 120) : ms)); fn(u); if (u < 1) requestAnimationFrame(step); else res(); };
+      requestAnimationFrame(step);
+    });
+  }
+  const ease = (u) => u * u * (3 - 2 * u);
+  async function say(text, hold = 650) {
+    const el = $('msg'); el.textContent = '';
+    if (reduce) el.textContent = text;
+    else for (let i = 1; i <= text.length; i++) { el.textContent = text.slice(0, i); await sleep(14); }
+    await sleep(hold);
+  }
+
+  // ----- UI -----
+  function hpClass(el, f) { el.classList.toggle('mid', f <= 0.5 && f > 0.2); el.classList.toggle('lo', f <= 0.2); el.style.width = (f * 100).toFixed(1) + '%'; }
+  function stagesText(m) { const b = []; if (m.st.def) b.push(`<span class="stat ${m.st.def > 0 ? 'up' : 'down'}">DEF${m.st.def > 0 ? '▲' : '▼'}</span>`); if (m.st.atk) b.push(`<span class="stat ${m.st.atk > 0 ? 'up' : 'down'}">ATK${m.st.atk > 0 ? '▲' : '▼'}</span>`); return b.join(''); }
+  function syncUI() {
+    hpClass($('f-bar'), foe.hp / foe.max); hpClass($('p-bar'), me.hp / me.max);
+    $('p-hp').textContent = `${me.hp} / ${me.max}`; $('f-lv').textContent = foe.lv; $('p-lv').textContent = me.lv;
+    $('p-exp').style.width = (exp * 100).toFixed(0) + '%';
+    $('f-stat').innerHTML = stagesText(foe); $('p-stat').innerHTML = stagesText(me);
+  }
+  function buildMoves() {
+    const box = $('moves'); box.innerHTML = '';
+    MOVES.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.id = 'mv-' + m.id; b.className = 'move ' + m.type;
+      b.innerHTML = `${m.name}<small><span>${m.type === 'water' ? 'Water' : 'Normal'}${m.power ? ' · ' + m.power : ''}</span><span>PP ${me.pp[i]}/${m.pp}</span></small>`;
+      b.title = m.text; b.disabled = busy || me.pp[i] <= 0;
+      b.onclick = () => turn(i);
+      box.appendChild(b);
+    });
+  }
+
+  // ----- effects -----
+  function mouthOf(side) { // concept-space mouth point to screen
+    const sp = SPOT[side], v = V[side];
+    const cx = (238 - ANCHOR[0]) * sp.s * (sp.flip ? -1 : 1), cy = (86 - ANCHOR[1]) * sp.s;
+    return [sp.x + v.dx + cx, sp.y + v.dy + cy];
+  }
+  function bodyOf(side) { const sp = SPOT[side], v = V[side]; return [sp.x + v.dx + (40 * sp.s) * (sp.flip ? -1 : 1), sp.y + v.dy - 150 * sp.s]; }
+
+  async function animMove(side, move, target) {
+    const v = V[side], o = side === 'me' ? 'foe' : 'me';
+    const a = [SPOT[side].x, SPOT[side].y], b = [SPOT[o].x, SPOT[o].y];
+    if (move.id === 'nip' || move.id === 'tail') {
+      v.mouth = move.id === 'nip' ? 1 : 0;
+      await tween(260, (u) => { const k = ease(u) * 0.62; v.dx = (b[0] - a[0]) * k; v.dy = (b[1] - a[1]) * k * 0.9 - Math.sin(u * Math.PI) * 18; if (move.id === 'tail') v.spin = u; });
+      const hit = bodyOf(o);
+      fx.push(move.id === 'nip' ? { k: 'bite', x: hit[0], y: hit[1], t0: performance.now(), r: 36 * SPOT[o].s / 0.29 * 0.7 } : { k: 'slash', x: hit[0], y: hit[1], t0: performance.now(), r: 40 });
+      await sleep(120);
+      v.mouth = 0;
+      await tween(300, (u) => { const k = (1 - ease(u)) * 0.62; v.dx = (b[0] - a[0]) * k; v.dy = (b[1] - a[1]) * k * 0.9; v.spin = move.id === 'tail' ? 1 : 0; });
+      v.dx = v.dy = 0; v.spin = 0;
+    } else if (move.id === 'bubble') {
+      v.mouth = 1;
+      const from = mouthOf(side), to = bodyOf(o);
+      for (let i = 0; i < 9; i++) fx.push({ k: 'bubble', from, to, t0: performance.now() + i * 70, dur: 520, r: 5 + (i % 3) * 2.5, wob: i * 1.7 });
+      await sleep(9 * 70 + 520);
+      fx.push({ k: 'splash', x: to[0], y: to[1], t0: performance.now(), r: 34 });
+      v.mouth = 0;
+    } else if (move.id === 'mist') {
+      const c = bodyOf(side);
+      fx.push({ k: 'mist', x: c[0], y: c[1] + 10, t0: performance.now(), dur: 1100, r: 120 * SPOT[side].s * 1.2 });
+      await sleep(1100);
+    }
+  }
+  async function hurt(side) {
+    const v = V[side];
+    for (let i = 0; i < 4; i++) { v.hide = true; await sleep(70); v.hide = false; await sleep(70); }
+  }
+  async function drainHP(mon, to) {
+    const from = mon.hp; await tween(Math.min(900, 120 + Math.abs(from - to) * 30), (u) => { mon.hp = Math.round(from + (to - from) * u); syncUI(); });
+  }
+
+  // ----- the rules (a small, familiar damage formula) -----
+  function damage(att, def, move) {
+    const A = move.kind === 'phys' ? att.atk * stage(att.st.atk) : att.spa, D = move.kind === 'phys' ? def.def * stage(def.st.def) : def.spd * stage(def.st.def) ;
+    const crit = Math.random() < 1 / 16;
+    const eff = move.type === 'water' ? 0.5 : 1;          // Water resists Water
+    const stab = move.type === 'water' ? 1.5 : 1;
+    const base = (((2 * att.lv) / 5 + 2) * move.power * A / D) / 50 + 2;
+    return { dmg: Math.max(1, Math.floor(base * stab * eff * (crit ? 1.5 : 1) * (0.85 + Math.random() * 0.15))), crit, eff };
+  }
+  async function useMove(side, idx) {
+    const att = side === 'me' ? me : foe, def = side === 'me' ? foe : me, o = side === 'me' ? 'foe' : 'me', move = MOVES[idx];
+    att.pp[idx]--;
+    await say(`${side === 'me' ? 'Naiad' : 'The wild Naiad'} used ${move.name}!`, 250);
+    await animMove(side, move, o);
+    if (move.kind === 'buff') {
+      if (att.st.def >= 6) { await say("But its Defense won't go any higher!"); return; }
+      att.st.def++; syncUI(); await say(`${side === 'me' ? 'Naiad' : 'The wild Naiad'}'s Defense rose!`); return;
+    }
+    if (move.kind === 'debuff') {
+      if (def.st.atk <= -6) { await say("But its Attack won't go any lower!"); return; }
+      def.st.atk--; syncUI(); await say(`${o === 'me' ? 'Naiad' : 'The wild Naiad'}'s Attack fell!`); return;
+    }
+    const r = damage(att, def, move);
+    hurt(o);
+    await drainHP(def, Math.max(0, def.hp - r.dmg));
+    if (r.crit) await say('A critical hit!', 450);
+    if (r.eff < 1) await say("It's not very effective…", 450);
+  }
+  async function faint(side) {
+    const v = V[side];
+    await tween(650, (u) => { v.sink = ease(u); v.alpha = 1 - u * 0.6; });
+    v.hide = true;
+    const p = SPOT[side]; fx.push({ k: 'splash', x: p.x, y: p.y - 10, t0: performance.now(), r: 40 });
+  }
+  async function turn(i) {
+    if (busy) return;
+    busy = true; buildMoves();
+    const foeMove = [0, 1, 1, 0, 2, 3][Math.floor(Math.random() * 6)];
+    const order = me.spe >= foe.spe ? ['me', 'foe'] : ['foe', 'me'];
+    for (const side of order) {
+      await useMove(side, side === 'me' ? i : foeMove);
+      if (foe.hp <= 0) { await faint('foe'); await say('The wild Naiad fainted!'); await gainExp(); await newFoe(); break; }
+      if (me.hp <= 0) { await faint('me'); await say('Naiad fainted!'); await say('Naiad was healed at the shore.', 500); await reset(false); break; }
+    }
+    busy = false; buildMoves();
+    $('msg').textContent = 'What will Naiad do?';
+  }
+  async function gainExp() {
+    const gain = 38 + Math.floor(Math.random() * 10);
+    await say(`Naiad gained ${gain} Exp. Points!`, 200);
+    exp += gain / 120;
+    syncUI(); await sleep(900);
+    if (exp >= 1) {
+      exp -= 1; me.lv++; me.max += 3; me.hp = Math.min(me.max, me.hp + 3); me.atk++; me.def++; me.spa++; me.spd++; me.spe++;
+      syncUI(); await say(`Naiad grew to Lv. ${me.lv}!`);
+    }
+  }
+  async function newFoe() {
+    foe = mkMon(Math.max(3, me.lv - 1 + Math.floor(Math.random() * 2)), 29 + Math.floor(Math.random() * 6));
+    const v = V.foe; v.hide = false; v.sink = 0; v.alpha = 1;
+    await tween(700, (u) => { v.dx = (1 - ease(u)) * 260; });
+    v.dx = 0; syncUI(); await say('Another wild Naiad appeared!', 500);
+  }
+  async function reset(announce = true) {
+    me = mkMon(8, 34); foe = mkMon(7, 31); exp = 0.3;
+    for (const k of ['me', 'foe']) Object.assign(V[k], { dx: 0, dy: 0, hide: false, alpha: 1, sink: 0, mouth: 0, spin: 0 });
+    fx.length = 0; syncUI(); buildMoves();
+    if (announce) { busy = true; buildMoves(); V.foe.dx = 260; await tween(700, (u) => { V.foe.dx = (1 - ease(u)) * 260; }); await say('A wild Naiad appeared!', 300); await say('Go! Naiad!', 300); busy = false; buildMoves(); $('msg').textContent = 'What will Naiad do?'; }
+  }
+  $('b-reset').onclick = () => { if (!busy) reset(); };
+  $('b-auto').onclick = () => { auto = !auto; $('b-auto').setAttribute('aria-pressed', String(auto)); };
+  setInterval(() => { if (auto && !busy && me) turn([0, 1, 2, 3][Math.floor(Math.random() * 4)] === 2 && me.st.def > 1 ? 0 : Math.floor(Math.random() * 4)); }, 700);
+
+  // ----- drawing -----
+  function drawMonster(side, t) {
+    const sp = SPOT[side], v = V[side];
+    if (v.hide) return;
+    const x = sp.x + v.dx, y = sp.y + v.dy;
+    // shadow on the platform
+    ctx.save(); ctx.globalAlpha = 0.28 * v.alpha; ctx.fillStyle = '#10304a';
+    ctx.beginPath(); ctx.ellipse(sp.x + v.dx * 0.9, sp.y + 2 + v.dy * 0.4, 70 * sp.s / 0.46 * (1 - v.sink * 0.5), 12 * sp.s / 0.46, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.save();
+    if (v.sink) { ctx.beginPath(); ctx.rect(x - 200, y - 400, 400, 402); ctx.clip(); }
+    ctx.globalAlpha = v.alpha;
+    ctx.translate(x, y + v.sink * 160 * sp.s);
+    const flipX = (sp.flip ? -1 : 1) * Math.cos(v.spin * Math.PI * 2);
+    ctx.scale(sp.s * (Math.abs(flipX) < 0.08 ? 0.08 * Math.sign(flipX || 1) : flipX), sp.s);
+    ctx.translate(-ANCHOR[0], -ANCHOR[1]);
+    Naiad.draw(ctx, { t: t + (side === 'foe' ? 1.7 : 0), mouth: v.mouth, blink: ((t + (side === 'foe' ? 1.3 : 0)) % 4.2) < 0.12, lineScale: 1 / (sp.s * 1.6) });
+    ctx.restore();
+  }
+  function drawFx(now) {
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i], u = (now - f.t0) / (f.dur || 420);
+      if (u < 0) continue;
+      if (u > 1) { fx.splice(i, 1); continue; }
+      ctx.save();
+      if (f.k === 'bubble') {
+        const x = f.from[0] + (f.to[0] - f.from[0]) * u, y = f.from[1] + (f.to[1] - f.from[1]) * u - Math.sin(u * Math.PI) * 40 + Math.sin(u * 12 + f.wob) * 4;
+        const g = ctx.createRadialGradient(x - f.r * 0.35, y - f.r * 0.35, 0.5, x, y, f.r);
+        g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.35, 'rgba(190,240,255,0.35)'); g.addColorStop(1, 'rgba(90,190,255,0.55)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, f.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.2; ctx.stroke();
+      } else if (f.k === 'splash') {
+        for (let j = 0; j < 12; j++) {
+          const a = (j / 12) * Math.PI * 2, d = f.r * ease(u), x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d * 0.6 - Math.sin(u * Math.PI) * 10;
+          ctx.fillStyle = `rgba(210,245,255,${1 - u})`; ctx.beginPath(); ctx.arc(x, y, 3.2 * (1 - u) + 1, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - u)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r * u, f.r * u * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (f.k === 'bite') {
+        ctx.strokeStyle = `rgba(255,255,255,${1 - u * 0.8})`; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        const c = 1 - ease(Math.min(1, u * 2)) * 0.6;
+        for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(f.x, f.y + s * f.r * 0.55 * c, f.r * 0.8, s < 0 ? 0.25 * Math.PI : 1.25 * Math.PI, s < 0 ? 0.75 * Math.PI : 1.75 * Math.PI); ctx.stroke(); }
+        ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,240,200,${0.6 * (1 - u)})`; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.5 * (1 + u), 0, Math.PI * 2); ctx.fill();
+      } else if (f.k === 'slash') {
+        ctx.strokeStyle = `rgba(255,255,255,${1 - u})`; ctx.lineWidth = 5 * (1 - u) + 1; ctx.lineCap = 'round';
+        for (let j = 0; j < 3; j++) { ctx.beginPath(); ctx.moveTo(f.x - 30 + j * 10, f.y - 28 + j * 6); ctx.lineTo(f.x - 30 + j * 10 + 60 * ease(Math.min(1, u * 1.6)), f.y - 28 + j * 6 + 40 * ease(Math.min(1, u * 1.6))); ctx.stroke(); }
+      } else if (f.k === 'mist') {
+        ctx.globalCompositeOperation = 'lighter';
+        for (let j = 0; j < 10; j++) {
+          const a = j / 10 * Math.PI * 2 + u * 5, rr = f.r * (0.55 + 0.25 * Math.sin(u * 6 + j)), x = f.x + Math.cos(a) * rr, y = f.y + Math.sin(a) * rr * 0.55;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, 26); g.addColorStop(0, `rgba(170,255,240,${0.35 * Math.sin(u * Math.PI)})`); g.addColorStop(1, 'rgba(170,255,240,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 26, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = `rgba(255,255,255,${0.9 * Math.sin(u * Math.PI)})`; ctx.fillRect(x - 1, y - 1 - u * 30, 2, 2);
+        }
+      }
+      ctx.restore();
+    }
+  }
+  // gentle glints on the water so the pre-rendered lagoon feels alive
+  const glints = Array.from({ length: 40 }, (_, i) => ({ x: Math.random() * LW, y: 150 + Math.random() * 200, p: Math.random() * 6, s: 0.6 + Math.random() }));
+  function drawGlints(t) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const g of glints) { const a = Math.max(0, Math.sin(t * g.s * 1.6 + g.p)) ** 6; if (a < 0.02) continue; ctx.fillStyle = `rgba(255,255,255,${a * 0.8})`; ctx.fillRect(g.x - 3 * g.s, g.y, 6 * g.s, 1.2); ctx.fillRect(g.x - 0.6, g.y - 1.5 * g.s, 1.2, 4 * g.s); }
+    ctx.restore();
+  }
+  function frame(now) {
+    const t = now / 1000, k = canvas.width / LW;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    if (bgReady) ctx.drawImage(bg, 0, 0, LW, LH);
+    else { const g = ctx.createLinearGradient(0, 0, 0, LH); g.addColorStop(0, '#8cc6e8'); g.addColorStop(0.35, '#3d97c7'); g.addColorStop(1, '#2bb3b0'); ctx.fillStyle = g; ctx.fillRect(0, 0, LW, LH); }
+    drawGlints(t);
+    drawMonster('foe', t);
+    drawMonster('me', t);
+    drawFx(now);
+    requestAnimationFrame(frame);
+  }
+  reset(true);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
